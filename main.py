@@ -1,20 +1,22 @@
-# This is a sample Python script.
+import numpy as np
+import tensorflow as tf
+import features
+from tensorflow.keras.layers import Dense, SimpleRNN, LSTM, GRU, Input
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 — копия.csv"]
+sequence_length = 100
+test_split = 0.05
+X_learn, Y_learn, X_test, Y_test = features.csv_files_to_learn_test_data(files, features.normalize_min_max_scaler, sequence_length, test_split)
+print(X_test)
+print(Y_test)
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
 
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
 #перевод источников данных [path, path, ...] в последовательности: learning(X, Y), testing(X, Y) (указывается метод нормалзизации данных)
 #рассчет среднего отклонения от истинных данных для учебных и тестовых данных, при прогнозировании на n шагов вперед
 #создание файлов визуализации прогнозирования на n шагов вперед (указывается длина последовательных данных, и вероятность визуализировать последовательность, чтобы можно было увидеть как различается прогнозирование последовательных данных)
 #сохранение обученной сети в файл, а так же информацию об настройках при обучении
+#функция расчета и записи в файл данных, спрогнозированных на n шагов вперед для всех данных и для всех файлов, учавствующих при обучении модели
+#возможность пропустить шаг обучения модели, используя загруженную с диска модель

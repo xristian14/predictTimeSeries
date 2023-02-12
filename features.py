@@ -1,10 +1,12 @@
+import random
+
 def min_max_scaler(min, max, val):
     return (val - min) / (max - min)
 
 def un_min_max_scaler(min, max, val):
     return val * (max - min) + min
 
-#считывает свечки файлов в списки формата: [["""file1_candles:"""[date, open, high, low, close], [date, open, high, low, close],..], ["""file2_candles:"""[date, open, high, low, close], [date, open, high, low, close],..]]
+#считывает все свечки файла в список формата: [[date, open, high, low, close, volume], [date, open, high, low, close, volume],..]
 def read_csv_file(file_path):
     file_candles = []
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -14,7 +16,7 @@ def read_csv_file(file_path):
                 first = False
             else:
                 list_line = line.split(",")
-                file_candles.append(int(list_line[0]), float(list_line[1]), float(list_line[2]), float(list_line[3]), float(list_line[4]), float(list_line[5]))
+                file_candles.append([int(list_line[0]), float(list_line[1]), float(list_line[2]), float(list_line[3]), float(list_line[4]), float(list_line[5])])
     return file_candles
 
 normalize_min_max_scaler_Min_price = [] #списки со значениями минимума и максимума в каждом файле
@@ -32,10 +34,10 @@ def normalize_min_max_scaler(candle_files, offset = 0.0):
     normalize_min_max_scaler_Min_volume = [file_candles[5] for file_candles in candle_files]
     normalize_min_max_scaler_Max_volume = [file_candles[5] for file_candles in candle_files]
     for i in range(len(candle_files)):
-        normalize_min_max_scaler_Min_price[i] = min(normalize_min_max_scaler_Min_price, candle_files[i][3])
-        normalize_min_max_scaler_Max_price[i] = max(normalize_min_max_scaler_Max_price, candle_files[i][2])
-        normalize_min_max_scaler_Min_volume[i] = min(normalize_min_max_scaler_Min_volume, candle_files[i][5])
-        normalize_min_max_scaler_Max_volume[i] = max(normalize_min_max_scaler_Max_volume, candle_files[i][5])
+        normalize_min_max_scaler_Min_price[i] = min([candle_files[i][k][3] for k in range(len(candle_files[i]))])
+        normalize_min_max_scaler_Max_price[i] = max([candle_files[i][k][2] for k in range(len(candle_files[i]))])
+        normalize_min_max_scaler_Min_volume[i] = min([candle_files[i][k][5] for k in range(len(candle_files[i]))])
+        normalize_min_max_scaler_Max_volume[i] = max([candle_files[i][k][5] for k in range(len(candle_files[i]))])
 
     for i in range(len(candle_files)):
         price_offset = (normalize_min_max_scaler_Max_price[i] - normalize_min_max_scaler_Min_price[i]) * offset
@@ -60,11 +62,14 @@ def normalize_min_max_scaler(candle_files, offset = 0.0):
         normalized_candle_files.append(normalized_file_candles)
     return normalized_candle_files
 
+data_split_sequence_length = 20 #длина последовательности, которые будут формировать обучающие и тестовые данные
 X_learn = []
 Y_learn = []
 X_test = []
 Y_test = []
-def csv_files_to_learn_test_data(file_paths, normalize_method):
+#считывает файлы, нормализует их данные, и возвращает 4 списка: X_learn, Y_learn, X_test, Y_test
+def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, test_split):
+    global data_split_sequence_length
     global X_learn
     global Y_learn
     global X_test
@@ -87,7 +92,30 @@ def csv_files_to_learn_test_data(file_paths, normalize_method):
         #нормализуем свечки
         normalized_candle_files = normalize_method(candle_files)
         #формируем обучающую и тестовую выборки
-        for i in range(len(candle_files[0])):
-            print()
+        sequence_number = data_split_sequence_length
+        is_learn_data = True
+        for i in range(len(normalized_candle_files[0]) - sequence_length):
+            if(sequence_number >= data_split_sequence_length):
+                sequence_number = 0
+                is_learn_data = False if random.random() <= test_split else True
+
+            input_sequence = []
+            for u in range(sequence_length):
+                input_list = []
+                for k in range(len(normalized_candle_files)):
+                    input_list += normalized_candle_files[k][i + u][1:]
+                input_sequence.append(input_list)
+            output_list = []
+            for k in range(len(normalized_candle_files)):
+                output_list += normalized_candle_files[k][i + sequence_length][1:]
+
+            if(is_learn_data):
+                X_learn.append(input_sequence)
+                Y_learn.append(output_list)
+            else:
+                X_test.append(input_sequence)
+                Y_test.append(output_list)
+            sequence_number += 1
     else:
         print("Ошибка! Количество свечек в файлах или их даты не совпадают.")
+    return (X_learn, Y_learn, X_test, Y_test)
