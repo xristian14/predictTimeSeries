@@ -10,7 +10,7 @@ from tensorflow.keras.optimizers import Adam
 model_path = "" #путь к файлу модели нейронной сети
 is_load_model = False #загружать модель нейронной сети с диска
 files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 — копия2.csv"] #список с путями к файлам в формате csv. Прогнозирование будет делаться на основе данных всех файлов
-sequence_length = 100 #длина последовательных данных для которой делается прогноз следующего значения
+sequence_length = 10 #длина последовательных данных для которой делается прогноз следующего значения
 data_split_sequence_length = 10 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
 predict_length = 48 #количество шагов на которое будут спрогнозированы данные
 validation_split = 0.3 #размер данных для валидации относительно всех данных
@@ -28,6 +28,7 @@ while os.path.isdir(f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"):
     folder_id += 1
 save_folder_path = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
 os.makedirs(save_folder_path)
+os.makedirs(f"{save_folder_path}/images")
 
 X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test = features.csv_files_to_learn_test_data(files, features.normalize_min_max_scaler, sequence_length, data_split_sequence_length, validation_split, test_split)
 x_learn_np, y_learn_np, x_valid_np, y_valid_np, x_test_np, y_test_np = np.array(X_learn), np.array(Y_learn), np.array(X_valid), np.array(Y_valid), np.array(X_test), np.array(Y_test)
@@ -41,15 +42,17 @@ model.summary()
 
 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
 
-history = model.fit(x_learn_np, y_learn_np, batch_size=10, epochs=150, validation_data=(x_valid_np, y_valid_np))
+history = model.fit(x_learn_np, y_learn_np, batch_size=10, epochs=2, validation_data=(x_valid_np, y_valid_np))
 
-plt.plot(history.history['loss'][3:])
-plt.plot(history.history['val_loss'][3:])
+plt.plot(history.history['loss'][1:])
+plt.plot(history.history['val_loss'][1:])
 plt.show()
 
 print(f"длина обучающей выборки: {len(X_learn)}")
 print(f"длина выборки валидации: {len(X_valid)}")
 print(f"длина тестовой выборки: {len(X_test)}")
+
+features.predict_data(model, sequence_length, predict_length, part_learn_predict, part_test_predict, True, save_folder_path)
 
 #перевод источников данных [path, path, ...] в последовательности: learning(X, Y), testing(X, Y) (указывается метод нормалзизации данных)
 #рассчет среднего отклонения от истинных данных для учебных и тестовых данных, при прогнозировании на n шагов вперед
@@ -57,3 +60,4 @@ print(f"длина тестовой выборки: {len(X_test)}")
 #сохранение обученной сети в файл, а так же информацию об настройках при обучении
 #функция расчета и записи в файл данных, спрогнозированных на n шагов вперед для всех данных и для всех файлов, учавствующих при обучении модели
 #возможность пропустить шаг обучения модели, используя загруженную с диска модель
+#расчет отклонения спрогнозированных данных от истинных делается: отдельно для каждого файла, и суммарно для всех файлов
