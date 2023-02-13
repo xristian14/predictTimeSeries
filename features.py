@@ -1,8 +1,10 @@
 import random
+import os
 import numpy as np
 import datetime
 import mplfinance as mpf
 import pandas as pd
+import copy
 
 
 def min_max_scaler(min, max, val):
@@ -188,16 +190,26 @@ def convert_candles_to_mplfinance_data(candles): #candles format: [[data (167508
 def visualize_to_file(candle_index, sequence_length, predict_length, predict_sequence, save_folder_path):
     global normalized_candle_files
     global candle_files
-    data_true = [item[candle_index:candle_index + sequence_length + predict_length] for item in candle_files]
-    data_predict = [item[candle_index:candle_index + sequence_length + predict_length] for item in candle_files]
-    print("****////")
-    print(f"data_true={data_true}")
-    print(f"data_predict={data_predict}")
+    data_true = []
+    for i in range(len(candle_files)):
+        data_true.append(copy.deepcopy(candle_files[i][candle_index:candle_index + sequence_length + predict_length]))
+    data_predict = []
+    for i in range(len(candle_files)):
+        data_predict.append(copy.deepcopy(candle_files[i][candle_index:candle_index + sequence_length + predict_length]))
     predict_sequence_files = []
     for i in range(len(candle_files)):
-        predict_sequence_files.append([predict_sequence[k][i * 5:(i + 1) * 5]] for k in range(len(predict_sequence)))
+        predict_sequence_file = []
+        for k in range(len(predict_sequence)):
+            predict_sequence_file.append(predict_sequence[k][i * 5:(i + 1) * 5][0])
+        predict_sequence_files.append(predict_sequence_file)
     for i in range(len(candle_files)):
-        for k in range(len(data_predict)):
+        for k in range(sequence_length):
+            data_predict[i][k][1] = data_true[0][0][1]
+            data_predict[i][k][2] = data_true[0][0][1]
+            data_predict[i][k][3] = data_true[0][0][1]
+            data_predict[i][k][4] = data_true[0][0][1]
+            data_predict[i][k][5] = data_true[0][0][5]
+        for k in range(sequence_length, len(data_predict)):
             data_predict[i][k][1] = predict_sequence_files[i][k][0]
             data_predict[i][k][2] = predict_sequence_files[i][k][1]
             data_predict[i][k][3] = predict_sequence_files[i][k][2]
@@ -208,21 +220,26 @@ def visualize_to_file(candle_index, sequence_length, predict_length, predict_seq
     for i in range(len(candle_files)):
         high_canal = [data_true[i][k][2] for k in range(len(data_true[i]))]
         low_canal = [data_true[i][k][3] for k in range(len(data_true[i]))]
-        data_true_reformatted = convert_candles_to_mplfinance_data(data_true)
-        data_predict_reformatted = convert_candles_to_mplfinance_data(data_predict)
+        #print(f"data_true   ={data_true}")
+        #print(f"data_predict={data_predict}")
+        #input()
+
+        data_true_reformatted = convert_candles_to_mplfinance_data(data_true[i])
+        data_predict_reformatted = convert_candles_to_mplfinance_data(data_predict[i])
         pdata_true = pd.DataFrame.from_dict(data_true_reformatted)
         pdata_true.set_index('Date', inplace=True)
         pdata_predict = pd.DataFrame.from_dict(data_predict_reformatted)
         pdata_predict.set_index('Date', inplace=True)
-        image_path = f"{save_folder_path}/images/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
+        image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
         add_plot = [mpf.make_addplot(high_canal, type='line', linewidths=1, alpha=1, color="black"),
                     mpf.make_addplot(low_canal, type='line', linewidths=1, alpha=1, color="black"),
                     mpf.make_addplot(pdata_predict, type='candle')]
-        mpf.plot(pdata_true, type='candle', style='yahoo', addplot=add_plot, figsize=(16, 8), ylabel='price', ylabel_lower='volume', tight_layout=True ,savefig=image_path)
+        mpf.plot(pdata_true, type='candle', style='yahoo', addplot=add_plot, figsize=(16, 9), ylabel='price', ylabel_lower='volume', tight_layout=True, savefig=image_path)
 
 def predict_data(model, sequence_length, predict_length, part_learn_predict, part_test_predict, is_visualize_prediction, save_folder_path):
     global normalized_candle_files
     #прогнозирование для обучающих данных
+    os.makedirs(f"{save_folder_path}/images/learn")
     learn_predict = dict() #словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
     for i in X_learn_indexes:
         rand = random.random()
@@ -230,12 +247,14 @@ def predict_data(model, sequence_length, predict_length, part_learn_predict, par
             learn_predict_sequence = []
             for k in range(predict_length):
                 input_sequence = []
-                for u in range(sequence_length - len(learn_predict_sequence)):
+                s_index = len(input_sequence)
+                e_index = s_index + sequence_length
+                for u in range(s_index, min(e_index, sequence_length)):
                     input_list = []
                     for k in range(len(normalized_candle_files)):
                         input_list += normalized_candle_files[k][i + u][1:]
                     input_sequence.append(input_list)
-                for u in range(len(learn_predict_sequence)):
+                for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
                     input_list = []
                     for k in range(len(normalized_candle_files)):
                         input_list += list(learn_predict_sequence[u][0][k * 5:(k + 1) * 5])
@@ -248,4 +267,35 @@ def predict_data(model, sequence_length, predict_length, part_learn_predict, par
             learn_predict[i] = learn_predict_sequence
             #визуализируем и сохраняем в файл
             if is_visualize_prediction:
-                visualize_to_file(i, sequence_length, predict_length, learn_predict_sequence, save_folder_path)
+                visualize_to_file(i, sequence_length, predict_length, learn_predict_sequence, f"{save_folder_path}/images/learn")
+
+    # прогнозирование для тестовых данных
+    os.makedirs(f"{save_folder_path}/images/test")
+    test_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
+    for i in X_test_indexes:
+        rand = random.random()
+        if rand <= part_test_predict:
+            test_predict_sequence = []
+            for k in range(predict_length):
+                input_sequence = []
+                s_index = len(input_sequence)
+                e_index = s_index + sequence_length
+                for u in range(s_index, min(e_index, sequence_length)):
+                    input_list = []
+                    for k in range(len(normalized_candle_files)):
+                        input_list += normalized_candle_files[k][i + u][1:]
+                    input_sequence.append(input_list)
+                for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
+                    input_list = []
+                    for k in range(len(normalized_candle_files)):
+                        input_list += list(test_predict_sequence[u][0][k * 5:(k + 1) * 5])
+                    input_sequence.append(input_list)
+
+                x = np.array(input_sequence)
+                inp = x.reshape(1, sequence_length, len(input_sequence[0]))
+                pred = model.predict(inp)
+                test_predict_sequence.append(pred)
+            test_predict[i] = test_predict_sequence
+            # визуализируем и сохраняем в файл
+            if is_visualize_prediction:
+                visualize_to_file(i, sequence_length, predict_length, test_predict_sequence, f"{save_folder_path}/images/test")
