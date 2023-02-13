@@ -1,4 +1,6 @@
 import random
+import numpy as np
+
 
 def min_max_scaler(min, max, val):
     return (val - min) / (max - min)
@@ -19,6 +21,7 @@ def read_csv_file(file_path):
                 file_candles.append([int(list_line[0]), float(list_line[1]), float(list_line[2]), float(list_line[3]), float(list_line[4]), float(list_line[5])])
     return file_candles
 
+normalized_candle_files = [] #нормализованные свечки
 normalize_min_max_scaler_Min_price = [] #списки со значениями минимума и максимума в каждом файле
 normalize_min_max_scaler_Max_price = []
 normalize_min_max_scaler_Min_volume = []
@@ -62,16 +65,22 @@ def normalize_min_max_scaler(candle_files, offset = 0.0):
         normalized_candle_files.append(normalized_file_candles)
     return normalized_candle_files
 
-data_split_sequence_length = 20 #длина последовательности, которые будут формировать обучающие и тестовые данные
+X_learn_indexes = [] #индексы свечек в normalized_candle_files для обучающих данных, индекс соответствует индексу начальной свечки в последовательных данных образца
+X_test_indexes = [] #индексы свечек в normalized_candle_files для тестовых данных, индекс соответствует индексу начальной свечки в последовательных данных образца
 X_learn = []
 Y_learn = []
+X_valid = []
+Y_valid = []
 X_test = []
 Y_test = []
-#считывает файлы, нормализует их данные, и возвращает 4 списка: X_learn, Y_learn, X_test, Y_test
-def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, test_split):
-    global data_split_sequence_length
+#считывает файлы, нормализует их данные, и возвращает 6 списков: X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test
+def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, data_split_sequence_length, validation_split, test_split):
+    global X_learn_indexes
+    global X_test_indexes
     global X_learn
     global Y_learn
+    global X_valid
+    global Y_valid
     global X_test
     global Y_test
     candle_files = [read_csv_file(file_path) for file_path in file_paths]
@@ -90,14 +99,22 @@ def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, 
                         is_files_fit = False
     if(is_files_fit):
         #нормализуем свечки
+        global normalized_candle_files
         normalized_candle_files = normalize_method(candle_files)
-        #формируем обучающую и тестовую выборки
+        #формируем обучающую, валидационную и тестовую выборки
         sequence_number = data_split_sequence_length
-        is_learn_data = True
+        data_types = ["learning", "validation", "testing"]
+        data_type = data_types[0]
         for i in range(len(normalized_candle_files[0]) - sequence_length):
-            if(sequence_number >= data_split_sequence_length):
+            if sequence_number >= data_split_sequence_length:
                 sequence_number = 0
-                is_learn_data = False if random.random() <= test_split else True
+                rand = random.random()
+                if rand <= validation_split:
+                    data_type = data_types[1]
+                elif rand <= validation_split + test_split:
+                    data_type = data_types[2]
+                else:
+                    data_type = data_types[0]
 
             input_sequence = []
             for u in range(sequence_length):
@@ -109,13 +126,39 @@ def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, 
             for k in range(len(normalized_candle_files)):
                 output_list += normalized_candle_files[k][i + sequence_length][1:]
 
-            if(is_learn_data):
+            if data_type == data_types[0]:
                 X_learn.append(input_sequence)
+                X_learn_indexes.append(i)
                 Y_learn.append(output_list)
+            elif data_type == data_types[1]:
+                X_valid.append(input_sequence)
+                Y_valid.append(output_list)
             else:
                 X_test.append(input_sequence)
+                X_test_indexes.append(i)
                 Y_test.append(output_list)
             sequence_number += 1
     else:
         print("Ошибка! Количество свечек в файлах или их даты не совпадают.")
-    return (X_learn, Y_learn, X_test, Y_test)
+    return (X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test)
+
+def predict_data(model, sequence_length, predict_length, is_visualize_prediction, save_folder_path):
+    #прогнозирование для обучающих данных
+    for i in X_learn_indexes:
+        predict_data = []
+        for k in range(predict_length):
+            input_sequence = []
+            for u in range(sequence_length - len(predict_data)):
+                input_list = []
+                for k in range(len(normalized_candle_files)):
+                    input_list += normalized_candle_files[k][i + u][1:]
+                input_sequence.append(input_list)
+        for u in range(len(predict_data)):
+            input_list = []
+            for k in range(len(normalized_candle_files)):
+                input_list += normalized_candle_files[k][i + u + (sequence_length - len(predict_data))][1:]
+            input_sequence.append(input_list)
+
+        x = np.array(input_sequence)
+        inp = x.reshape(1, sequence_length, len(input_sequence[0]))
+        pred = model.predict(inp)
