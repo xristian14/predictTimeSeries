@@ -187,7 +187,11 @@ def convert_candles_to_mplfinance_data(candles): #candles format: [[data (167508
         reformatted_data['Volume'].append(candle[5])
     return reformatted_data
 
-def visualize_to_file(candle_index, sequence_length, predict_length, predict_sequence, save_folder_path):
+def visualize_learning_model(visualize_length):
+    print("")
+
+
+def visualize_predict_to_file(candle_index, sequence_length, predict_length, predict_sequence, save_folder_path):
     global normalized_candle_files
     global candle_files
     normalize_open = []
@@ -232,6 +236,8 @@ def visualize_to_file(candle_index, sequence_length, predict_length, predict_seq
         #print(f"data_true   ={data_true}")
         #print(f"data_predict={data_predict}")
         #input()
+        ymin = min(min([data_true[i][k][3] for k in range(len(data_true[i]))]), min([data_predict[i][k][3] for k in range(len(data_predict[i]))]))
+        ymax = max(max([data_true[i][k][2] for k in range(len(data_true[i]))]), max([data_predict[i][k][3] for k in range(len(data_predict[i]))]))
 
         data_true_reformatted = convert_candles_to_mplfinance_data(data_true[i])
         data_predict_reformatted = convert_candles_to_mplfinance_data(data_predict[i])
@@ -240,10 +246,10 @@ def visualize_to_file(candle_index, sequence_length, predict_length, predict_seq
         pdata_predict = pd.DataFrame.from_dict(data_predict_reformatted)
         pdata_predict.set_index('Date', inplace=True)
         image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
-        add_plot = [mpf.make_addplot(high_canal, type='line', linewidths=1, alpha=1, color="black"),
-                    mpf.make_addplot(low_canal, type='line', linewidths=1, alpha=1, color="black"),
-                    mpf.make_addplot(pdata_predict, type='candle')]
-        mpf.plot(pdata_true, type='candle', style='yahoo', addplot=add_plot, figsize=(16, 9), ylabel='price', ylabel_lower='volume', tight_layout=True, savefig=image_path)
+        add_plot = [mpf.make_addplot(high_canal, type='line', linewidths=1, alpha=1, color="black", ylim=(ymin,ymax)),
+                    mpf.make_addplot(low_canal, type='line', linewidths=1, alpha=1, color="black", ylim=(ymin,ymax)),
+                    mpf.make_addplot(pdata_predict, type='candle', ylim=(ymin,ymax))]
+        mpf.plot(pdata_true, type='candle', style='yahoo', addplot=add_plot, ylim=(ymin,ymax), figsize=(16, 9), ylabel='price', datetime_format="%Y-%b-%d", tight_layout=True, savefig=image_path)
 
 def predict_data(model, sequence_length, predict_length, part_learn_predict, part_test_predict, is_visualize_prediction, save_folder_path):
     global normalized_candle_files
@@ -295,68 +301,4 @@ def predict_data(model, sequence_length, predict_length, part_learn_predict, par
             #визуализируем и сохраняем в файл
             if is_visualize_prediction:
                 folder_path = learn_images_folder_path if is_learn else test_images_folder_path
-                visualize_to_file(i, sequence_length, predict_length, predict_sequence, folder_path)
-    """#-----------------------saved
-    for i in X_learn_indexes:
-        #global candle_files #&&&
-        rand = random.random()
-        if rand <= part_learn_predict:
-            learn_predict_sequence = []
-            for k in range(predict_length):
-                input_sequence = []
-                s_index = k
-                e_index = s_index + sequence_length
-                for u in range(s_index, min(e_index, sequence_length)):
-                    input_list = []
-                    for m in range(len(normalized_candle_files)):
-                        input_list += normalized_candle_files[m][i + u][1:]
-                    input_sequence.append(input_list)
-                for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
-                    input_list = []
-                    for m in range(len(normalized_candle_files)):
-                        input_list += list(learn_predict_sequence[u][0][m * 5:(m + 1) * 5])
-                    input_sequence.append(input_list)
-                x = np.array(input_sequence)
-                inp = x.reshape(1, sequence_length, len(input_sequence[0]))
-                pred = model.predict(inp)
-                learn_predict_sequence.append(pred)
-                #print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
-            learn_predict[i] = learn_predict_sequence
-            #print(f"candle_files[{0}][{i}:{i + sequence_length + predict_length}]={candle_files[0][i:i + sequence_length + predict_length]}")
-            #print(f"normalized_candle_files[{0}][{i}:{i + sequence_length + predict_length}]={normalized_candle_files[0][i:i + sequence_length + predict_length]}")
-            #print(f"learn_predict_sequence={learn_predict_sequence}")
-            #input()
-            #визуализируем и сохраняем в файл
-            if is_visualize_prediction:
-                visualize_to_file(i, sequence_length, predict_length, learn_predict_sequence, f"{save_folder_path}/images/learn")
-    #-----------------------saved
-    # прогнозирование для тестовых данных
-    os.makedirs(f"{save_folder_path}/images/test")
-    test_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
-    for i in X_test_indexes:
-        rand = random.random()
-        if rand <= part_test_predict:
-            test_predict_sequence = []
-            for k in range(predict_length):
-                input_sequence = []
-                s_index = len(input_sequence)
-                e_index = s_index + sequence_length
-                for u in range(s_index, min(e_index, sequence_length)):
-                    input_list = []
-                    for k in range(len(normalized_candle_files)):
-                        input_list += normalized_candle_files[k][i + u][1:]
-                    input_sequence.append(input_list)
-                for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
-                    input_list = []
-                    for k in range(len(normalized_candle_files)):
-                        input_list += list(test_predict_sequence[u][0][k * 5:(k + 1) * 5])
-                    input_sequence.append(input_list)
-
-                x = np.array(input_sequence)
-                inp = x.reshape(1, sequence_length, len(input_sequence[0]))
-                pred = model.predict(inp)
-                test_predict_sequence.append(pred)
-            test_predict[i] = test_predict_sequence
-            # визуализируем и сохраняем в файл
-            if is_visualize_prediction:
-                visualize_to_file(i, sequence_length, predict_length, test_predict_sequence, f"{save_folder_path}/images/test")"""
+                visualize_predict_to_file(i, sequence_length, predict_length, predict_sequence, folder_path)
