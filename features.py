@@ -190,9 +190,11 @@ def convert_candles_to_mplfinance_data(candles): #candles format: [[data (167508
 def visualize_to_file(candle_index, sequence_length, predict_length, predict_sequence, save_folder_path):
     global normalized_candle_files
     global candle_files
+    normalize_open = []
     data_true = []
     for i in range(len(candle_files)):
         data_true.append(copy.deepcopy(candle_files[i][candle_index:candle_index + sequence_length + predict_length]))
+        normalize_open.append(normalized_candle_files[i][candle_index][1])
     data_predict = []
     for i in range(len(candle_files)):
         data_predict.append(copy.deepcopy(candle_files[i][candle_index:candle_index + sequence_length + predict_length]))
@@ -202,20 +204,27 @@ def visualize_to_file(candle_index, sequence_length, predict_length, predict_seq
         for k in range(len(predict_sequence)):
             predict_sequence_file.append(predict_sequence[k][i * 5:(i + 1) * 5][0])
         predict_sequence_files.append(predict_sequence_file)
+    #print(f"predict_sequence_files={predict_sequence_files}")
     for i in range(len(candle_files)):
         for k in range(sequence_length):
-            data_predict[i][k][1] = data_true[0][0][1]
-            data_predict[i][k][2] = data_true[0][0][1]
-            data_predict[i][k][3] = data_true[0][0][1]
-            data_predict[i][k][4] = data_true[0][0][1]
-            data_predict[i][k][5] = data_true[0][0][5]
-        for k in range(sequence_length, len(data_predict)):
-            data_predict[i][k][1] = predict_sequence_files[i][k][0]
-            data_predict[i][k][2] = predict_sequence_files[i][k][1]
-            data_predict[i][k][3] = predict_sequence_files[i][k][2]
-            data_predict[i][k][4] = predict_sequence_files[i][k][3]
-            data_predict[i][k][5] = predict_sequence_files[i][k][4]
-    un_normalize_min_max_scaler(data_predict)
+            data_predict[i][k][1] = copy.deepcopy(normalize_open[i])
+            data_predict[i][k][2] = copy.deepcopy(normalize_open[i])
+            data_predict[i][k][3] = copy.deepcopy(normalize_open[i])
+            data_predict[i][k][4] = copy.deepcopy(normalize_open[i])
+            data_predict[i][k][5] = copy.deepcopy(normalize_open[i])
+        #print(f"sequence_length={sequence_length}, len(data_predict[i])={len(data_predict[i])}")
+        for k in range(sequence_length, len(data_predict[i])):
+            #print(f"i={i}, k={k}")
+            #print(f"data_predict[i][k][1]={data_predict[i][k][1]}")
+            #print(f"predict_sequence_files[i][k - sequence_length][0]={predict_sequence_files[i][k - sequence_length][0]}")
+            data_predict[i][k][1] = predict_sequence_files[i][k - sequence_length][0]
+            data_predict[i][k][2] = predict_sequence_files[i][k - sequence_length][1]
+            data_predict[i][k][3] = predict_sequence_files[i][k - sequence_length][2]
+            data_predict[i][k][4] = predict_sequence_files[i][k - sequence_length][3]
+            data_predict[i][k][5] = predict_sequence_files[i][k - sequence_length][4]
+    #print(f"data_predict before unnormalize={data_predict}")
+    data_predict = un_normalize_min_max_scaler(data_predict)
+    #print(f"data_predict after unnormalize={data_predict}")
 
     for i in range(len(candle_files)):
         high_canal = [data_true[i][k][2] for k in range(len(data_true[i]))]
@@ -239,36 +248,88 @@ def visualize_to_file(candle_index, sequence_length, predict_length, predict_seq
 def predict_data(model, sequence_length, predict_length, part_learn_predict, part_test_predict, is_visualize_prediction, save_folder_path):
     global normalized_candle_files
     #прогнозирование для обучающих данных
-    os.makedirs(f"{save_folder_path}/images/learn")
+    learn_images_folder_path = f"{save_folder_path}/images/learn"
+    test_images_folder_path = f"{save_folder_path}/images/test"
+    os.makedirs(learn_images_folder_path)
+    os.makedirs(test_images_folder_path)
     learn_predict = dict() #словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
+    test_predict = dict()  #словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
+    for i in range(len(X_learn_indexes) + len(X_test_indexes)):
+        if i < len(X_learn_indexes):
+            is_learn = True
+            candle_index = X_learn_indexes[i]
+        else:
+            is_learn = False
+            candle_index = X_test_indexes[i - len(X_learn_indexes)]
+        #global candle_files #&&&
+        rand = random.random()
+        if (is_learn and rand <= part_learn_predict) or (not is_learn and rand <= part_test_predict):
+            predict_sequence = []
+            for k in range(predict_length):
+                input_sequence = []
+                s_index = k
+                e_index = s_index + sequence_length
+                for u in range(s_index, min(e_index, sequence_length)):
+                    input_list = []
+                    for m in range(len(normalized_candle_files)):
+                        input_list += normalized_candle_files[m][candle_index + u][1:]
+                    input_sequence.append(input_list)
+                for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
+                    input_list = []
+                    for m in range(len(normalized_candle_files)):
+                        input_list += list(predict_sequence[u][0][m * 5:(m + 1) * 5])
+                    input_sequence.append(input_list)
+                x = np.array(input_sequence)
+                inp = x.reshape(1, sequence_length, len(input_sequence[0]))
+                pred = model.predict(inp, verbose=0)
+                predict_sequence.append(pred)
+                #print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
+            if is_learn:
+                learn_predict[i] = predict_sequence
+            else:
+                test_predict[i] = predict_sequence
+            #print(f"candle_files[{0}][{i}:{i + sequence_length + predict_length}]={candle_files[0][i:i + sequence_length + predict_length]}")
+            #print(f"normalized_candle_files[{0}][{i}:{i + sequence_length + predict_length}]={normalized_candle_files[0][i:i + sequence_length + predict_length]}")
+            #print(f"predict_sequence={predict_sequence}")
+            #input()
+            #визуализируем и сохраняем в файл
+            if is_visualize_prediction:
+                folder_path = learn_images_folder_path if is_learn else test_images_folder_path
+                visualize_to_file(i, sequence_length, predict_length, predict_sequence, folder_path)
+    """#-----------------------saved
     for i in X_learn_indexes:
+        #global candle_files #&&&
         rand = random.random()
         if rand <= part_learn_predict:
             learn_predict_sequence = []
             for k in range(predict_length):
                 input_sequence = []
-                s_index = len(input_sequence)
+                s_index = k
                 e_index = s_index + sequence_length
                 for u in range(s_index, min(e_index, sequence_length)):
                     input_list = []
-                    for k in range(len(normalized_candle_files)):
-                        input_list += normalized_candle_files[k][i + u][1:]
+                    for m in range(len(normalized_candle_files)):
+                        input_list += normalized_candle_files[m][i + u][1:]
                     input_sequence.append(input_list)
                 for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
                     input_list = []
-                    for k in range(len(normalized_candle_files)):
-                        input_list += list(learn_predict_sequence[u][0][k * 5:(k + 1) * 5])
+                    for m in range(len(normalized_candle_files)):
+                        input_list += list(learn_predict_sequence[u][0][m * 5:(m + 1) * 5])
                     input_sequence.append(input_list)
-
                 x = np.array(input_sequence)
                 inp = x.reshape(1, sequence_length, len(input_sequence[0]))
                 pred = model.predict(inp)
                 learn_predict_sequence.append(pred)
+                #print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
             learn_predict[i] = learn_predict_sequence
+            #print(f"candle_files[{0}][{i}:{i + sequence_length + predict_length}]={candle_files[0][i:i + sequence_length + predict_length]}")
+            #print(f"normalized_candle_files[{0}][{i}:{i + sequence_length + predict_length}]={normalized_candle_files[0][i:i + sequence_length + predict_length]}")
+            #print(f"learn_predict_sequence={learn_predict_sequence}")
+            #input()
             #визуализируем и сохраняем в файл
             if is_visualize_prediction:
                 visualize_to_file(i, sequence_length, predict_length, learn_predict_sequence, f"{save_folder_path}/images/learn")
-
+    #-----------------------saved
     # прогнозирование для тестовых данных
     os.makedirs(f"{save_folder_path}/images/test")
     test_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
@@ -298,4 +359,4 @@ def predict_data(model, sequence_length, predict_length, part_learn_predict, par
             test_predict[i] = test_predict_sequence
             # визуализируем и сохраняем в файл
             if is_visualize_prediction:
-                visualize_to_file(i, sequence_length, predict_length, test_predict_sequence, f"{save_folder_path}/images/test")
+                visualize_to_file(i, sequence_length, predict_length, test_predict_sequence, f"{save_folder_path}/images/test")"""

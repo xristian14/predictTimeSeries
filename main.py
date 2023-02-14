@@ -9,14 +9,14 @@ from tensorflow.keras.optimizers import Adam
 
 model_path = "" #путь к файлу модели нейронной сети
 is_load_model = False #загружать модель нейронной сети с диска
-files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 — копия2.csv"] #список с путями к файлам в формате csv. Прогнозирование будет делаться на основе данных всех файлов
+files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 — копия.csv"] #список с путями к файлам в формате csv. Прогнозирование будет делаться на основе данных всех файлов
 sequence_length = 100 #длина последовательных данных для которой делается прогноз следующего значения
 data_split_sequence_length = 10 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
 predict_length = 50 #количество шагов на которое будут спрогнозированы данные
-validation_split = 0.2 #размер данных для валидации относительно всех данных
-test_split = 0.3 #размер тестовых данных относительно всех данных
-part_learn_predict = 0.02 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-part_test_predict = 0.05 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+validation_split = 0.05 #размер данных для валидации относительно всех данных
+test_split = 0.2 #размер тестовых данных относительно всех данных
+part_learn_predict = 0.008 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+part_test_predict = 0.04 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 predict_sequence_length = 5 #прогнозирование будет выполняться для последовательных обучающих и тестовых данных данной длины
 is_visualize_prediction = True #визуализировать спрогнозированные последовательности, и сохранить в файлы
 
@@ -35,17 +35,17 @@ x_learn_np, y_learn_np, x_valid_np, y_valid_np, x_test_np, y_test_np = np.array(
 
 model = Sequential()
 model.add(Input((sequence_length, len(X_learn[0][0]))))
-model.add(LSTM(16, return_sequences=True))
-model.add(LSTM(16))
+model.add(LSTM(64, return_sequences=True))
+model.add(LSTM(64))
 model.add(Dense(len(X_learn[0][0])))
 model.summary()
 
-model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
+model.compile(loss="binary_crossentropy", metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
+#tf.losses.MeanSquaredError()
+history = model.fit(x_learn_np, y_learn_np, batch_size=32, epochs=150, validation_data=(x_valid_np, y_valid_np))
 
-history = model.fit(x_learn_np, y_learn_np, batch_size=16, epochs=3, validation_data=(x_valid_np, y_valid_np))
-
-plt.plot(history.history['loss'][1:])
-plt.plot(history.history['val_loss'][1:])
+plt.plot(history.history['loss'][0:])
+plt.plot(history.history['val_loss'][0:])
 plt.show()
 
 print(f"длина обучающей выборки: {len(X_learn)}")
