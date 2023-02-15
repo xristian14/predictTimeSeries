@@ -9,14 +9,14 @@ from tensorflow.keras.optimizers import Adam
 
 model_path = "" #путь к файлу модели нейронной сети
 is_load_model = False #загружать модель нейронной сети с диска
-files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 — копия.csv"] #список с путями к файлам в формате csv. Прогнозирование будет делаться на основе данных всех файлов
+files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_1000.csv"] #список с путями к файлам в формате csv. Прогнозирование будет делаться на основе данных всех файлов
 sequence_length = 200 #длина последовательных данных для которой делается прогноз следующего значения
-data_split_sequence_length = 10 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
+data_split_sequence_length = 20 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
 predict_length = 50 #количество шагов на которое будут спрогнозированы данные
 validation_split = 0.05 #размер данных для валидации относительно всех данных
 test_split = 0.2 #размер тестовых данных относительно всех данных
-part_learn_predict = 0.005 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-part_test_predict = 0.03 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+part_learn_predict = 0.04 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+part_test_predict = 0.1 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 predict_sequence_length = 5 #прогнозирование будет выполняться для последовательных обучающих и тестовых данных данной длины
 is_visualize_prediction = True #визуализировать спрогнозированные последовательности, и сохранить в файлы
 
@@ -42,11 +42,11 @@ model.summary()
 
 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
 #"binary_crossentropy"
-history = model.fit(x_learn_np, y_learn_np, batch_size=16, epochs=100, validation_data=(x_valid_np, y_valid_np))
+history = model.fit(x_learn_np, y_learn_np, batch_size=32, epochs=300, validation_data=(x_valid_np, y_valid_np))
 
-plt.figure(figsize=(6,6))
-plt.plot(history.history['loss'][2:])
-plt.plot(history.history['val_loss'][2:])
+plt.figure(figsize=(6,5))
+plt.plot(history.history['loss'][3:])
+plt.plot(history.history['val_loss'][3:])
 plt.show()
 
 print(f"длина обучающей выборки: {len(X_learn)}")
