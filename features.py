@@ -15,7 +15,7 @@ def un_min_max_scaler(min, max, val):
 
 #считывает все свечки файла в список формата: [[date, open, high, low, close, volume], [date, open, high, low, close, volume],..]
 def read_csv_file(file_path):
-    file_candles = []
+    candles = []
     with open(file_path, 'r', encoding='utf-8') as file:
         first = True
         for line in file:
@@ -23,11 +23,12 @@ def read_csv_file(file_path):
                 first = False
             else:
                 list_line = line.split(",")
-                file_candles.append([int(list_line[0]), float(list_line[1]), float(list_line[2]), float(list_line[3]), float(list_line[4]), float(list_line[5])])
-    return file_candles
+                candles.append([int(list_line[0]), float(list_line[1]), float(list_line[2]), float(list_line[3]), float(list_line[4]), float(list_line[5])])
+    return candles
 
-# normalize_relativity_min_max_scaler - нормализует свечки по принципу min_max_scaler в следующем диапазоне: (минимум в последовательности:min, максимум в п.:max) -> range=max-min -> output_offset = ((максимальный множитель, на который, следующая за последовательностью свечек длины sequence_length, свечка, увеличивала диапазон последовательности) - 1) * range * 2 -> max += output_offset, min -= output_offset. Также добавляет во входную последовательность для каждой свечки файлов 4 значения: часть размера текущего диапазона от максимального диапазона, найденного среди всех последовательностей по данной формуле для цены и для объема, а так же часть максимума данного диапазона
-# сделать прогноз для нескольких последовательных файлов (btcusdt 2013-2020, btcusdt 2020-2023) candles_files[i_ds][i_f][i_c][1]
+# normalize_relativity_min_max_scaler - нормализует свечки по принципу min_max_scaler в следующем диапазоне: (минимум в последовательности:min, максимум в п.:max) -> range=max-min -> output_offset = ((максимальный множитель, на который, следующая за последовательностью свечек длины sequence_length, свечка, увеличивала диапазон последовательности) - 1) * range * 1.2 -> max += output_offset, min -= output_offset. Также добавляет во входную последовательность для каждой свечки файлов 4 значения: часть размера текущего диапазона от максимального диапазона, найденного среди всех последовательностей по данной формуле для цены и для объема, а так же часть максимума данного диапазона
+def normalize_relativity_min_max_scaler_init():
+    print()
 
 # normalize_min_max_scaler - нормализует свечки по принципу min_max_scaler, offset - отступ от минимума и максимума как часть от диапазона
 normalize_min_max_scaler_Min_price = [] #списки со значениями минимума и максимума в каждом файле
@@ -113,9 +114,12 @@ is_save_prediction_data = False
 data_sources_paths = []
 normalize_method = []
 
+data_sources_file_names = [] # то же самое что и data_sources_paths, но без полного пути, только имя файла
 data_sources = [] #свечки для всех файлов всех источников данных
-X_learn_candle_indexes_files = [] #индексы обучающих свечек, данная свечка соответствует выходу нейронной сети, а входная последовательность это предыдущие свечки длиной sequence_length. Индексы свечек для всех файлов одного источника данных, т.к. индексы относятся ко всем источникам данных. X_learn_candle_indexes_files[0][0] - индекс файла 0-й обучающей свечки, X_learn_candle_indexes_files[0][1] - индекс свечки в файле 0-й обучающей свечки
-X_test_candle_indexes_files = [] #индексы тестовых свечек, данная свечка соответствует выходу нейронной сети, а входная последовательность это предыдущие свечки длиной sequence_length. Индексы свечек для всех файлов одного источника данных, т.к. индексы относятся ко всем источникам данных. X_test_candle_indexes_files[0][0] - индекс файла 0-й тестовой свечки, X_test_candle_indexes_files[0][1] - индекс свечки в файле 0-й тестовой свечки
+data_sources_data_type = [] #тип данных для всех свечек для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не имеет входной последовательности)]. Нет разделения на источники данных, т.к. тип свечки относится ко всем источникам данных
+
+#X_learn_candle_indexes_files = [] #индексы обучающих свечек, данная свечка соответствует выходу нейронной сети, а входная последовательность это предыдущие свечки длиной sequence_length. Индексы свечек для всех файлов одного источника данных, т.к. индексы относятся ко всем источникам данных. X_learn_candle_indexes_files[0][0] - индекс файла 0-й обучающей свечки, X_learn_candle_indexes_files[0][1] - индекс свечки в файле 0-й обучающей свечки
+#X_test_candle_indexes_files = [] #индексы тестовых свечек, данная свечка соответствует выходу нейронной сети, а входная последовательность это предыдущие свечки длиной sequence_length. Индексы свечек для всех файлов одного источника данных, т.к. индексы относятся ко всем источникам данных. X_test_candle_indexes_files[0][0] - индекс файла 0-й тестовой свечки, X_test_candle_indexes_files[0][1] - индекс свечки в файле 0-й тестовой свечки
 
 #нужно прогнозировать данные даже для последних свечк, для которых нет примера действительных данных, т.к. при переходе на следующий файл нужно чтобы самая последняя свечка предыдущего файла была торговой
 
@@ -137,7 +141,99 @@ Y_test = []
 
 def data_sources_to_input_output_data():
     global data_sources_paths
+    global data_sources_file_names
     global data_sources
+    global data_sources_data_type
+    # устанавливаем имена файлов без полных путей
+    data_sources_file_names = []
+    for i_ds in range(len(data_sources_paths)):
+        data_source_file_names = []
+        for i_f in range(len(data_sources_paths[i_ds])):
+            file_name = data_sources_paths[i_ds][i_f].replace("\\", "/").split("/")[-1]
+            data_source_file_names.append(file_name)
+        data_sources_file_names.append(data_source_file_names)
+    # считываем источники данных
+    data_sources = []
+    for i_ds in range(len(data_sources_paths)):
+        data_sources.append([read_csv_file(file_path) for file_path in data_sources_paths[i_ds]])
+    # проверяем, совпадает ли: количество файлов у разных источников данных, количество свечек в файлах разных источников данных, даты в свечках разных источников данных
+    is_files_fit = True
+    error_messages = []
+    if len(data_sources) > 1:
+        # количество файлов у разных источников данных
+        for i_ds in range(1, len(data_sources)):
+            if len(data_sources[i_ds]) != len(data_sources[0]):
+                is_files_fit = False
+                error_messages.append(f"Не совпадает количество файлов у источниковв данных: {i_ds} и {0}.")
+        # количество свечек в файлах разных источников данных
+        if is_files_fit:
+            for i_f in range(len(data_sources[0])):
+                for i_ds in range(1, len(data_sources)):
+                    if len(data_sources[i_ds][i_f]) != len(data_sources[0][i_f]):
+                        is_files_fit = False
+                        error_messages.append(f"Не совпадает количество свечек в файлах разных источников данных: {data_sources_file_names[i_ds][i_f]} и {data_sources_file_names[0][i_f]}.")
+        # даты в свечках разных источников данных
+        if is_files_fit:
+            for i_f in range(len(data_sources[0])):
+                for i_c in range(len(data_sources[0][i_f])):
+                    for i_ds in range(1, len(data_sources)):
+                        if data_sources[i_ds][i_f][i_c][0] != data_sources[0][i_f][i_c][0]:
+                            is_files_fit = False
+                            error_messages.append(f"Не совпадают даты в свечках разных источников данных: (файл={data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={data_sources[i_ds][i_f][i_c][0]}) и (файл={data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={data_sources[0][i_f][i_c][0]}).")
+    # выводим ошибки
+    for message in error_messages:
+        print(message)
+    # если не было ошибок,  и формируем обучающие, валидационные и тестовые данные
+    if is_files_fit:
+        # опредлеяем типы данных для всех свечек
+        global data_split_sequence_length
+        global validation_split
+        global test_split
+        data_sources_data_type = []
+        learn_count = 0
+        valid_count = 0
+        test_count = 0
+        sequence_number = 0
+        data_types = [0, 1, 2]
+        data_type = data_types[random.randint(0, 2)]
+        for i_f in range(len(data_sources[0])):
+            file_data_types = []
+            for i_c in range(len(data_sources[0][i_f])):
+                if sequence_number >= data_split_sequence_length:
+                    sequence_number = 0
+                    # выбираем случайный тип среди тех, которые составляют от всех данных меньшую часть чем указано для них, если ни один из типов не является меньше указанного, выбираем случайный тип
+                    data_types_less_than_split = []  # типы данных, количество которых меньше чем их указанное в настройках количество
+                    if learn_count / (learn_count + valid_count + test_count) < 1 - (validation_split + test_split):
+                        data_types_less_than_split.append(data_types[0])
+                    if valid_count / (learn_count + valid_count + test_count) < validation_split:
+                        data_types_less_than_split.append(data_types[1])
+                    if test_count / (learn_count + valid_count + test_count) < test_split:
+                        data_types_less_than_split.append(data_types[2])
+
+                    if len(data_types_less_than_split) > 0:
+                        data_type = random.choice(data_types_less_than_split)
+                    else:
+                        data_type = data_types[random.randint(0, 2)]
+                if i_c >= sequence_length:
+                    file_data_types.append(data_type)
+                    if data_type == data_types[0]:
+                        learn_count += 1
+                    elif data_type == data_types[1]:
+                        valid_count += 1
+                    else:
+                        test_count += 1
+                    sequence_number += 1
+                else:
+                    file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length, отмечаем что она не относится ни к какой выборке
+            data_sources_data_type.append(file_data_types)
+        #формируем обучающие, валидационные и тестовые данные
+        global X_learn
+        global Y_learn
+        global X_valid
+        global Y_valid
+        global X_test
+        global Y_test
+
 
 #считывает файлы, нормализует их данные, и возвращает 6 списков: X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test
 def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, data_split_sequence_length, validation_split, test_split):
