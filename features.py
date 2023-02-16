@@ -26,12 +26,16 @@ def read_csv_file(file_path):
                 file_candles.append([int(list_line[0]), float(list_line[1]), float(list_line[2]), float(list_line[3]), float(list_line[4]), float(list_line[5])])
     return file_candles
 
+# normalize_relativity_min_max_scaler - нормализует свечки по принципу min_max_scaler в следующем диапазоне: (минимум в последовательности:min, максимум в п.:max) -> range=max-min -> output_offset = ((максимальный множитель, на который, следующая за последовательностью свечек длины sequence_length, свечка, увеличивала диапазон последовательности) - 1) * range * 2 -> max += output_offset, min -= output_offset. Также добавляет во входную последовательность для каждой свечки файлов 4 значения: часть размера текущего диапазона от максимального диапазона, найденного среди всех последовательностей по данной формуле для цены и для объема, а так же часть максимума данного диапазона
+# сделать прогноз для нескольких последовательных файлов (btcusdt 2013-2020, btcusdt 2020-2023) candles_files[i_ds][i_f][i_c][1]
+
+# normalize_min_max_scaler - нормализует свечки по принципу min_max_scaler, offset - отступ от минимума и максимума как часть от диапазона
 normalize_min_max_scaler_Min_price = [] #списки со значениями минимума и максимума в каждом файле
 normalize_min_max_scaler_Max_price = []
 normalize_min_max_scaler_Min_volume = []
 normalize_min_max_scaler_Max_volume = []
-#нормализует свечки по принципу min_max_scaler, margin - отступ от минимума и максимума как часть от диапазона
-def normalize_min_max_scaler(candle_files, offset = 0.0):
+
+def normalize_min_max_scaler_init(candle_files, offset = 0.0):
     global normalize_min_max_scaler_Min_price
     global normalize_min_max_scaler_Max_price
     global normalize_min_max_scaler_Min_volume
@@ -54,41 +58,67 @@ def normalize_min_max_scaler(candle_files, offset = 0.0):
         normalize_min_max_scaler_Min_volume[i] -= volume_offset
         normalize_min_max_scaler_Max_volume[i] += volume_offset
 
-    normalized_candle_files = []
-    for i in range(len(candle_files)):
-        normalized_file_candles = []
-        for k in range(len(candle_files[i])):
+def normalize_min_max_scaler_do(candles_sequence_files, is_replace=False): #при каждом вызове сохраняет в специальный список параметры с которыми была проведена нормализация последовательности свечек (впоследствии эти параметры используются для правильной денормализации), is_replace - определяет, нужно ли заменить последний элемент в этом списке на тот который будет создан при этом вызове. Нужно указывать is_replace=True когда последовательность денормализуется после нормазизации, и между этим не было нормализации другой последовательности, таким образом список не будет заполняться ненужными значениями.
+    normalized_candles_sequence_files = []
+    for i in range(len(candles_sequence_files)):
+        normalized_file_candles_sequence = []
+        for k in range(len(candles_sequence_files[i])):
             n_candle = []
-            n_candle.append(candle_files[i][k][0])
-            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candle_files[i][k][1]))
-            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candle_files[i][k][2]))
-            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candle_files[i][k][3]))
-            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candle_files[i][k][4]))
-            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_volume[i], normalize_min_max_scaler_Max_volume[i], candle_files[i][k][5]))
-            normalized_file_candles.append(n_candle)
-        normalized_candle_files.append(normalized_file_candles)
-    return normalized_candle_files
+            n_candle.append(candles_sequence_files[i][k][0])
+            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candles_sequence_files[i][k][1]))
+            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candles_sequence_files[i][k][2]))
+            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candles_sequence_files[i][k][3]))
+            n_candle.append(min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], candles_sequence_files[i][k][4]))
+            n_candle.append( min_max_scaler(normalize_min_max_scaler_Min_volume[i], normalize_min_max_scaler_Max_volume[i], candles_sequence_files[i][k][5]))
+            normalized_file_candles_sequence.append(n_candle)
+        normalized_candles_sequence_files.append(normalized_file_candles_sequence)
+    return normalized_candles_sequence_files
 
-def un_normalize_min_max_scaler(normalized_candle_files):
+def normalize_min_max_scaler_undo(normalized_candles_sequence_files, index=-1): #index - индекс нормализованной последовательности, необходимо указывать для правильной денормализации. index=-1 значит нужно взять параметры нормализации последней нормализованной последовательности
     global normalize_min_max_scaler_Min_price
     global normalize_min_max_scaler_Max_price
     global normalize_min_max_scaler_Min_volume
     global normalize_min_max_scaler_Max_volume
 
-    un_normalized_candle_files = []
-    for i in range(len(normalized_candle_files)):
-        un_normalized_file_candles = []
-        for k in range(len(normalized_candle_files[i])):
+    unnormalized_candles_sequence_files = []
+    for i in range(len(normalized_candles_sequence_files)):
+        unnormalized_file_candles_sequence = []
+        for k in range(len(normalized_candles_sequence_files[i])):
             n_candle = []
-            n_candle.append(normalized_candle_files[i][k][0])
-            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candle_files[i][k][1]))
-            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candle_files[i][k][2]))
-            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candle_files[i][k][3]))
-            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candle_files[i][k][4]))
-            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_volume[i], normalize_min_max_scaler_Max_volume[i], normalized_candle_files[i][k][5]))
-            un_normalized_file_candles.append(n_candle)
-        un_normalized_candle_files.append(un_normalized_file_candles)
-    return un_normalized_candle_files
+            n_candle.append(normalized_candles_sequence_files[i][k][0])
+            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candles_sequence_files[i][k][1]))
+            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candles_sequence_files[i][k][2]))
+            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candles_sequence_files[i][k][3]))
+            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_price[i], normalize_min_max_scaler_Max_price[i], normalized_candles_sequence_files[i][k][4]))
+            n_candle.append(un_min_max_scaler(normalize_min_max_scaler_Min_volume[i], normalize_min_max_scaler_Max_volume[i], normalized_candles_sequence_files[i][k][5]))
+            unnormalized_file_candles_sequence.append(n_candle)
+        unnormalized_candles_sequence_files.append(unnormalized_file_candles_sequence)
+    return unnormalized_candles_sequence_files
+
+normalize_min_max_scaler = [normalize_min_max_scaler_init, normalize_min_max_scaler_do, normalize_min_max_scaler_undo]
+
+
+save_folder_path = ""
+data_split_sequence_length = 0
+sequence_length = 0
+predict_length = 0
+validation_split = 0
+test_split = 0
+part_learn_predict = 0
+part_test_predict = 0
+part_learn_predict_visualize = 0
+part_test_predict_visualize = 0
+is_visualize_prediction = False
+is_save_prediction_data = False
+data_sources_paths = []
+normalize_method = []
+
+data_sources = [] #свечки для всех файлов всех источников данных
+X_learn_candle_indexes_files = [] #индексы обучающих свечек, данная свечка соответствует выходу нейронной сети, а входная последовательность это предыдущие свечки длиной sequence_length. Индексы свечек для всех файлов одного источника данных, т.к. индексы относятся ко всем источникам данных. X_learn_candle_indexes_files[0][0] - индекс файла 0-й обучающей свечки, X_learn_candle_indexes_files[0][1] - индекс свечки в файле 0-й обучающей свечки
+X_test_candle_indexes_files = [] #индексы тестовых свечек, данная свечка соответствует выходу нейронной сети, а входная последовательность это предыдущие свечки длиной sequence_length. Индексы свечек для всех файлов одного источника данных, т.к. индексы относятся ко всем источникам данных. X_test_candle_indexes_files[0][0] - индекс файла 0-й тестовой свечки, X_test_candle_indexes_files[0][1] - индекс свечки в файле 0-й тестовой свечки
+
+#нужно прогнозировать данные даже для последних свечк, для которых нет примера действительных данных, т.к. при переходе на следующий файл нужно чтобы самая последняя свечка предыдущего файла была торговой
+
 
 candle_files = []
 candle_files_type_data = [] #типы данных для всех свечек(без деления на файлы, т.к. индекс свечки будет относиться ко всем файлам): 0-обучающие, 1-валидационные, 2-тестовые, -1-ни к какому типу не относится. Тип свечки означает что эта свечка является прогнозируемой, то есть если эта свечка обучающая, значит последовательность предыдущих свечек длиной sequence_length будет входом, а эта свечка выходом
@@ -102,6 +132,13 @@ X_valid = []
 Y_valid = []
 X_test = []
 Y_test = []
+
+
+
+def data_sources_to_input_output_data():
+    global data_sources_paths
+    global data_sources
+
 #считывает файлы, нормализует их данные, и возвращает 6 списков: X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test
 def csv_files_to_learn_test_data(file_paths, normalize_method, sequence_length, data_split_sequence_length, validation_split, test_split):
     global candle_files

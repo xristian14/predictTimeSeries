@@ -7,18 +7,6 @@ from tensorflow.keras.layers import Dense, SimpleRNN, LSTM, GRU, Input
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
-model_path = "" #путь к файлу модели нейронной сети
-is_load_model = False #загружать модель нейронной сети с диска
-files = ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_1000.csv"] #список с путями к файлам в формате csv. Прогнозирование будет делаться на основе данных всех файлов
-sequence_length = 200 #длина последовательных данных для которой делается прогноз следующего значения
-data_split_sequence_length = 20 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
-predict_length = 50 #количество шагов на которое будут спрогнозированы данные
-validation_split = 0.05 #размер данных для валидации относительно всех данных
-test_split = 0.2 #размер тестовых данных относительно всех данных
-part_learn_predict = 0.04 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-part_test_predict = 0.1 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-predict_sequence_length = 5 #прогнозирование будет выполняться для последовательных обучающих и тестовых данных данной длины
-is_visualize_prediction = True #визуализировать спрогнозированные последовательности, и сохранить в файлы
 
 app_files_folder_name = "app_data"
 if not os.path.isdir(app_files_folder_name):
@@ -30,11 +18,33 @@ save_folder_path = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
 os.makedirs(save_folder_path)
 os.makedirs(f"{save_folder_path}/images")
 
-X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test = features.csv_files_to_learn_test_data(files, features.normalize_min_max_scaler, sequence_length, data_split_sequence_length, validation_split, test_split)
+
+features.save_folder_path = save_folder_path
+features.data_split_sequence_length = 20 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
+features.sequence_length = 200 #длина последовательных данных для которой делается прогноз следующего значения
+features.predict_length = 50 #количество шагов на которое будут спрогнозированы данные
+features.validation_split = 0.05 #размер данных для валидации относительно всех данных
+features.test_split = 0.2 #размер тестовых данных относительно всех данных
+features.part_learn_predict = 0.2 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+features.part_test_predict = 0.5 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+features.part_learn_predict_visualize = 0.5 #часть от спрогнозированных данных, которые нужно визуализировать в файлы
+features.part_test_predict_visualize = 0.5 #часть от спрогнозированных данных, которые нужно визуализировать в файлы
+features.is_visualize_prediction = True #визуализировать спрогнозированные последовательности, и сохранить в файлы
+features.is_save_prediction_data = False #сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных, включая валидационные. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
+features.data_sources_paths = [ #источникики данных, состоящие из файлов в формате csv
+    ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_0-600.csv", "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_400-1000.csv"],
+    ["E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_0-600.csv", "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_400-1000.csv"]
+]
+is_load_model = False #загружать модель нейронной сети с файла
+model_path = "" #путь к файлу модели нейронной сети
+features.normalize_method = features.normalize_min_max_scaler #метод нормализации данных
+
+
+X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test = features.csv_files_to_learn_test_data(data_sources, features.normalize_min_max_scaler, sequence_length, data_split_sequence_length, validation_split, test_split)
 x_learn_np, y_learn_np, x_valid_np, y_valid_np, x_test_np, y_test_np = np.array(X_learn), np.array(Y_learn), np.array(X_valid), np.array(Y_valid), np.array(X_test), np.array(Y_test)
 
 model = Sequential()
-model.add(Input((sequence_length, len(X_learn[0][0]))))
+model.add(Input((features.sequence_length, len(X_learn[0][0]))))
 model.add(LSTM(128, return_sequences=True))
 model.add(LSTM(128))
 model.add(Dense(len(X_learn[0][0])))
