@@ -2,6 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import normalizers
 import features
 from tensorflow.keras.layers import Dense, SimpleRNN, LSTM, GRU, Input
 from tensorflow.keras.models import Sequential
@@ -40,6 +41,17 @@ features.data_sources_paths = [ #источникики данных, состо
     #     "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_0-600.csv",
     #     "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_400-1000.csv"
     # ]
+]
+
+data_sources_meta = [
+    features.DataSourceMeta(files=[
+            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_0-40.csv",
+            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_25-65.csv"
+        ], date_index = 0, data_indexes = [1,2,3,4,5],
+        normalizers=[
+            normalizers.InpSeqMinMaxScaler([1,2,3,4]),
+            normalizers.InpSeqMinMaxScaler([5])
+        ])
 ]
 is_load_model = False #загружать модель нейронной сети с файла
 model_path = "" #путь к файлу модели нейронной сети

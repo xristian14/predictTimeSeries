@@ -6,9 +6,134 @@ import mplfinance as mpf
 import pandas as pd
 import copy
 
+class DataSourceMeta:
+    def __init__(self, files, date_index, data_indexes, normalizers):
+        self.files = files # список с файлами
+        self.date_index = date_index # индекс даты
+        self.data_indexes = data_indexes # индексы данных, которые нужно считать из файла
+        self.normalizers = normalizers
+
 class DataManager:
-    def __init__(self, data_sources_meta, sequence_length):
-        pass
+    @classmethod
+    def read_csv_file(file_path, date_index, data_indexes):
+        data = []
+        with open(file_path, 'r', encoding='utf-8') as file:
+            first = True
+            for line in file:
+                if first:  # пропускаем шапку файла
+                    first = False
+                else:
+                    list_line = line.split(",")
+                    data_line = []
+                    data_line.append(int(list_line[date_index]))
+                    for i in data_indexes:
+                        data_line.append(float(list_line[i]))
+                    data.append(data_line)
+        return data
+    def __init__(self, data_sources_meta, sequence_length, data_split_sequence_length, validation_split, test_split):
+        self.__sequence_length = sequence_length
+        # определяем имена файлов без полных путей
+        self.__data_sources_file_names = []  # имена файлов источников данных без полного пути
+        for i_ds in range(len(data_sources_meta)):
+            data_source_file_names = []
+            for i_f in range(len(data_sources_meta[i_ds].files)):
+                file_name = data_sources_meta[i_ds].files[i_f].replace("\\", "/").split("/")[-1]
+                data_source_file_names.append(file_name)
+            self.__data_sources_file_names.append(data_source_file_names)
+        # считываем источники данных
+        self.__data_sources = []  # данные всех файлов всех источников данных
+        for i_ds in range(len(data_sources_meta)):
+            self.__data_sources.append([self.read_csv_file(file_path, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file_path in data_sources_meta[i_ds].files])
+        # проверяем, совпадает ли: количество файлов у разных источников данных, количество данных в файлах разных источников данных, даты в данных разных источников данных
+        is_files_fit = True
+        error_messages = []
+        if len(self.__data_sources) > 1:
+            # количество файлов у разных источников данных
+            for i_ds in range(1, len(self.__data_sources)):
+                if len(self.__data_sources[i_ds]) != len(self.__data_sources[0]):
+                    is_files_fit = False
+                    error_messages.append(f"Не совпадает количество файлов у источников данных: {self.__data_sources_file_names[i_ds]} и {self.__data_sources_file_names[0]}.")
+            # количество данных в файлах разных источников данных
+            if is_files_fit:
+                for i_f in range(len(self.__data_sources[0])):
+                    for i_ds in range(1, len(self.__data_sources)):
+                        if len(self.__data_sources[i_ds][i_f]) != len(self.__data_sources[0][i_f]):
+                            is_files_fit = False
+                            error_messages.append(f"Не совпадает количество свечек в файлах разных источников данных: {self.__data_sources_file_names[i_ds][i_f]} и {self.__data_sources_file_names[0][i_f]}.")
+            # даты в свечках разных источников данных
+            if is_files_fit:
+                for i_f in range(len(self.__data_sources[0])):
+                    for i_c in range(len(self.__data_sources[0][i_f])):
+                        for i_ds in range(1, len(self.__data_sources)):
+                            if self.__data_sources[i_ds][i_f][i_c][0] != self.__data_sources[0][i_f][i_c][0]:
+                                is_files_fit = False
+                                error_messages.append(f"Не совпадают даты в данных разных источников данных: (файл={self.__data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={self.__data_sources[i_ds][i_f][i_c][0]}) и (файл={self.__data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={self.__data_sources[0][i_f][i_c][0]}).")
+        # выводим ошибки
+        for message in error_messages:
+            print(message)
+        # если не было ошибок,  и формируем обучающие, валидационные и тестовые данные
+        if is_files_fit:
+            # опредлеяем типы данных для всех свечек
+            self.__data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не имеет входной последовательности)]. Нет разделения на источники данных, т.к. тип свечки относится ко всем источникам данных
+            learn_count = 0
+            valid_count = 0
+            test_count = 0
+            sequence_number = 0
+            data_types = [0, 1, 2]
+            data_type = data_types[random.randint(0, 2)]
+            for i_f in range(len(self.__data_sources[0])):
+                file_data_types = []
+                for i_c in range(len(self.__data_sources[0][i_f])):
+                    if sequence_number >= data_split_sequence_length:
+                        sequence_number = 0
+                        # выбираем случайный тип среди тех, которые составляют от всех данных меньшую часть чем указано для них, если ни один из типов не является меньше указанного, выбираем случайный тип
+                        data_types_less_than_split = []  # типы данных, количество которых меньше чем их указанное в настройках количество
+                        if learn_count / (learn_count + valid_count + test_count) < 1 - (validation_split + test_split):
+                            data_types_less_than_split.append(data_types[0])
+                        if valid_count / (learn_count + valid_count + test_count) < validation_split:
+                            data_types_less_than_split.append(data_types[1])
+                        if test_count / (learn_count + valid_count + test_count) < test_split:
+                            data_types_less_than_split.append(data_types[2])
+
+                        if len(data_types_less_than_split) > 0:
+                            data_type = random.choice(data_types_less_than_split)
+                        else:
+                            data_type = data_types[random.randint(0, 2)]
+                    if i_c >= sequence_length:
+                        file_data_types.append(data_type)
+                        if data_type == data_types[0]:
+                            learn_count += 1
+                        elif data_type == data_types[1]:
+                            valid_count += 1
+                        else:
+                            test_count += 1
+                        sequence_number += 1
+                    else:
+                        file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length, отмечаем что она не относится ни к какой выборке
+                self.__data_sources_data_type.append(file_data_types)
+            # формируем обучающие, валидационные и тестовые данные
+            global X_learn
+            global Y_learn
+            global X_valid
+            global Y_valid
+            global X_test
+            global Y_test
+
+    @property
+    def sequence_length(self):
+        return self.__sequence_length
+
+    @property
+    def data_sources_file_names(self):
+        return self.__data_sources_file_names
+
+    @property
+    def data_sources(self):
+        return self.__data_sources
+
+    @property
+    def data_sources_data_type(self):
+        return self.__data_sources_data_type
 
 # --------------------------------------------------------------------------------
 
