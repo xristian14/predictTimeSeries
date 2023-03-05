@@ -20,8 +20,8 @@ os.makedirs(f"{save_folder_path}/images")
 
 
 features.save_folder_path = save_folder_path
-features.data_split_sequence_length = 10 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
-features.sequence_length = 100 #длина последовательных данных для которой делается прогноз следующего значения
+features.data_split_sequence_length = 3 #данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
+features.sequence_length = 3 #длина последовательных данных для которой делается прогноз следующего значения
 features.predict_length = 50 #количество шагов на которое будут спрогнозированы данные
 features.validation_split = 0.05 #размер данных для валидации относительно всех данных
 features.test_split = 0.2 #размер тестовых данных относительно всех данных
@@ -32,13 +32,20 @@ features.part_test_predict_visualize = 0.5 #часть от спрогнозир
 features.is_visualize_prediction = True #визуализировать спрогнозированные последовательности, и сохранить в файлы
 features.is_save_prediction_data = False #сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных, включая валидационные. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
 features.data_sources_paths = [ #источникики данных, состоящие из файлов в формате csv
-    ["E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_0-600.csv", "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_400-1000.csv"],
-    ["E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_0-600.csv", "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_400-1000.csv"]
+    [
+        "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_0-40.csv",
+        "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_25-65.csv"
+    ]#,
+    # [
+    #     "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_0-600.csv",
+    #     "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01_lim_400-1000.csv"
+    # ]
 ]
 is_load_model = False #загружать модель нейронной сети с файла
 model_path = "" #путь к файлу модели нейронной сети
 features.normalize_method = features.normalize_min_max_scaler #метод нормализации данных
 features.data_sources_to_input_output_data()
+features.normalize_relativity_min_max_scaler_init()
 
 #X_learn, Y_learn, X_valid, Y_valid, X_test, Y_test = features.csv_files_to_learn_test_data(data_sources, features.normalize_min_max_scaler, sequence_length, data_split_sequence_length, validation_split, test_split)
 x_learn_np, y_learn_np, x_valid_np, y_valid_np, x_test_np, y_test_np = np.array(X_learn), np.array(Y_learn), np.array(X_valid), np.array(Y_valid), np.array(X_test), np.array(Y_test)

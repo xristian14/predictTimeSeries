@@ -6,6 +6,12 @@ import mplfinance as mpf
 import pandas as pd
 import copy
 
+class DataManager:
+    def __init__(self, data_sources_meta, sequence_length):
+        pass
+
+# --------------------------------------------------------------------------------
+
 
 def min_max_scaler(min, max, val):
     return (val - min) / (max - min)
@@ -27,8 +33,23 @@ def read_csv_file(file_path):
     return candles
 
 # normalize_relativity_min_max_scaler - нормализует свечки по принципу min_max_scaler в следующем диапазоне: (минимум в последовательности:min, максимум в п.:max) -> range=max-min -> output_offset = ((максимальный множитель, на который, следующая за последовательностью свечек длины sequence_length, свечка, увеличивала диапазон последовательности) - 1) * range * 1.2 -> max += output_offset, min -= output_offset. Также добавляет во входную последовательность для каждой свечки файлов 4 значения: часть размера текущего диапазона от максимального диапазона, найденного среди всех последовательностей по данной формуле для цены и для объема, а так же часть максимума данного диапазона
+normalize_relativity_min_max_scaler_data_sources_max_price_range = []
+normalize_relativity_min_max_scaler_data_sources_volume_price_range = []
+normalize_relativity_min_max_scaler_data_sources_output_offset = []
 def normalize_relativity_min_max_scaler_init():
-    print()
+    global sequence_length
+    # опредлеяем output_offset и масмиальные размеры диапазонов цены и объема для всех источников данных
+    for i_ds in range(len(data_sources)):
+        for i_f in range(len(data_sources[i_ds])):
+            for i_c in range(len(data_sources[i_ds][i_f])):
+                if data_sources_data_type[i_f][i_c] != -1:
+                    max_price_input_sequence = max([max(data_sources[i_ds][i_f][i_c_s][1:5]) for i_c_s in range(i_c - sequence_length, i_c)])
+                    min_price_input_sequence = min([min(data_sources[i_ds][i_f][i_c_s][1:5]) for i_c_s in range(i_c - sequence_length, i_c)])
+                    max_volume_input_sequence = max([data_sources[i_ds][i_f][i_c_s][5] for i_c_s in range(i_c - sequence_length, i_c)])
+                    min_volume_input_sequence = min([data_sources[i_ds][i_f][i_c_s][5] for i_c_s in range(i_c - sequence_length, i_c)])
+    input()
+
+
 
 # normalize_min_max_scaler - нормализует свечки по принципу min_max_scaler, offset - отступ от минимума и максимума как часть от диапазона
 normalize_min_max_scaler_Min_price = [] #списки со значениями минимума и максимума в каждом файле
