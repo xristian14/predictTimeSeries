@@ -136,7 +136,7 @@ class DataManager:
             # выполняем подготовку нормализаторов
             for i_ds in range(len(data_sources_meta)):
                 for i_n in range(len(data_sources_meta[i_ds].normalizers)):
-                    data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources, self.data_sources_data_type, self.sequence_length)
+                    data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources[i_ds], self.data_sources_data_type, self.sequence_length)
 
             # формируем обучающие, валидационные и тестовые данные
             self.x_learn = []
@@ -145,6 +145,72 @@ class DataManager:
             self.y_valid = []
             self.x_test = []
             self.y_test = []
+            for i_f in range(len(self.data_sources_data_type)):
+                for i_c in range(len(self.data_sources_data_type[i_f])):
+                    if self.data_sources_data_type[i_f][i_c] != -1:
+                        data_sources_inp_sequences = []
+                        for i_ds in range(len(self.data_sources)):
+                            inp_sequence = []
+                            for i_seq in range(i_c - self.sequence_length):  # проходим по всем свечкам входной последовательности
+                                inp_sequence.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+                            data_sources_inp_sequences.append(inp_sequence)
+
+                        finally_inp_seq = []
+                        for i_ds in range(len(self.data_sources)):
+                            for i_n in range(self.data_sources_meta[i_ds].normalizers):
+                                finally_inp_seq.append(self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_sequences[i_ds]))
+
+                        for i in range(i_c - self.sequence_length): # проходим по всем свечкам входной последовательности
+                            single_data = []
+                            for i_ds in range(len(self.data_sources)):
+                                for i_n in range(self.data_sources_meta[i_ds].normalizers):
+                                    single_data.append(self.data_sources_meta[i_ds].normalizers[i_n].normalize)
+
+    """Нормализует данные: для каждого источника данных создается список с данными на каждый нормализатор данного источника данных, далее все списки объединяются в один список, элементы которого - списки (входные вектора), содержащие последовательно записанные данные всех нормализаторов, всех источников данных
+    Возвращает: последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации в виде: settings[i_ds][i_normalize].
+    Независимо от значения is_output, во входную последовательность не будет включена свечка с индексом i_c, она является свечкой выходного значения"""
+    @classmethod
+    def normalize_data_sources(self, i_f, i_c, is_output):
+        data_sources_inp_seq = []
+        for i_ds in range(len(self.data_sources)):
+            data_source_inp_seq = []
+            for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
+                data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+            data_sources_inp_seq.append(data_source_inp_seq)
+
+        data_sources_normalizers_inp_seq = []
+        data_sources_normalizers_out = []
+        data_sources_normalizers_settings = []
+
+        for i_ds in range(len(self.data_sources)):
+            normalizers_inp_seq = []
+            normalizers_out = []
+            normalizers_settings = []
+            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], self.data_sources[i_ds][i_f][i_c] if is_output else None)
+                normalizers_inp_seq.append(x)
+                normalizers_out.append(y)
+                normalizers_settings.append(n_setting)
+
+            data_sources_normalizers_inp_seq.append(normalizers_inp_seq)
+            data_sources_normalizers_out.append(normalizers_out)
+            data_sources_normalizers_settings.append(normalizers_settings)
+
+        finally_inp_seq = []
+        for i_candle in range(len(data_sources_normalizers_inp_seq[0][0])):
+            one_data = []
+            for i_ds in range(len(data_sources_normalizers_inp_seq)):
+                for i_n in range(len(data_sources_normalizers_inp_seq[i_ds])):
+                    one_data.append(data_sources_normalizers_inp_seq[i_ds][i_n][i_candle])
+            finally_inp_seq.append(one_data)
+
+        finally_out_seq = []
+        if is_output:
+            for i_ds in range(len(data_sources_normalizers_out)):
+                for i_n in range(len(data_sources_normalizers_out[i_ds])):
+                    finally_out_seq.append(data_sources_normalizers_out[i_ds][i_n])
+
+        return (finally_inp_seq, finally_out_seq, data_sources_normalizers_settings)
 
 
 # --------------------------------------------------------------------------------
