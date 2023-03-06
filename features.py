@@ -15,7 +15,7 @@ class DataSourceMeta:
 
 class DataManager:
     @classmethod
-    def read_csv_file(file_path, date_index, data_indexes):
+    def read_csv_file(cls, file_path, date_index, data_indexes):
         data = []
         with open(file_path, 'r', encoding='utf-8') as file:
             first = True
@@ -50,7 +50,11 @@ class DataManager:
         # считываем источники данных
         self.data_sources = []  # данные всех файлов всех источников данных
         for i_ds in range(len(data_sources_meta)):
-            self.data_sources.append([self.read_csv_file(file_path, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file_path in data_sources_meta[i_ds].files])
+            self.data_sources.append([self.read_csv_file(file, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file in data_sources_meta[i_ds].files])
+            # data_source_files = []
+            # for i_f in range(len(data_sources_meta[i_ds].files)):
+            #     data_source_files.append(self.read_csv_file(data_sources_meta[i_ds].files[i_f], data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes))
+            # self.data_sources.append(data_source_files)
 
         # проверяем, совпадает ли: количество файлов у разных источников данных, количество данных в файлах разных источников данных, даты в данных разных источников данных
         is_files_fit = True
@@ -78,7 +82,7 @@ class DataManager:
                                 error_messages.append(f"Не совпадают даты в данных разных источников данных: (файл={self.data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={self.data_sources[i_ds][i_f][i_c][0]}) и (файл={self.data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={self.data_sources[0][i_f][i_c][0]}).")
 
         # выводим ошибки
-        for message in error_messages:
+        for message in error_messages[:25]:
             print(message)
 
         # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
@@ -158,11 +162,12 @@ class DataManager:
                         elif self.data_sources_data_type[i_f][i_c] == 2:
                             self.x_test.append(x)
                             self.y_test.append(y)
+        else:
+            raise ValueError(error_messages[0])
 
     """Нормализует данные: для каждого источника данных создается список с данными на каждый нормализатор данного источника данных, далее все списки объединяются в один список, элементы которого - списки (входные вектора), содержащие последовательно записанные данные всех нормализаторов, всех источников данных
     Возвращает: последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации в виде: settings[i_ds][i_normalize].
     Независимо от значения is_output, во входную последовательность не будет включена свечка с индексом i_c, она является свечкой выходного значения"""
-    @classmethod
     def normalize_data_sources(self, i_f, i_c, is_output):
         data_sources_inp_seq = []
         for i_ds in range(len(self.data_sources)):
@@ -194,16 +199,16 @@ class DataManager:
             one_data = []
             for i_ds in range(len(data_sources_normalizers_inp_seq)):
                 for i_n in range(len(data_sources_normalizers_inp_seq[i_ds])):
-                    one_data.append(data_sources_normalizers_inp_seq[i_ds][i_n][i_candle])
+                    one_data.extend(data_sources_normalizers_inp_seq[i_ds][i_n][i_candle])
             finally_inp_seq.append(one_data)
 
         finally_out_seq = []
         if is_output:
             for i_ds in range(len(data_sources_normalizers_out)):
                 for i_n in range(len(data_sources_normalizers_out[i_ds])):
-                    finally_out_seq.append(data_sources_normalizers_out[i_ds][i_n])
+                    finally_out_seq.extend(data_sources_normalizers_out[i_ds][i_n])
 
-        return (finally_inp_seq, finally_out_seq, data_sources_normalizers_settings)
+        return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
 
 # --------------------------------------------------------------------------------

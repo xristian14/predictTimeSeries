@@ -11,7 +11,7 @@ class NormalizerBase:
 
     """вычисляет минимум и максимум в данных, с начального индекса по конечный, конечный индекс не включается, data_indexes - индексы значений в data_source, для которых будет выполняться нормализация"""
     @classmethod
-    def min_max_data(data, start_index, end_index, data_indexes):
+    def min_max_data(cls, data, start_index, end_index, data_indexes):
         min_data = None
         max_data = None
         for i in range(start_index, end_index):
@@ -29,11 +29,10 @@ class NormalizerBase:
 
 class MinMaxScalerBase:
     @classmethod
-    def min_max_scaler(min_val, max_val, val):
+    def min_max_scaler(cls, min_val, max_val, val):
         return (val - min_val) / (max_val - min_val)
-
     @classmethod
-    def un_min_max_scaler(min_val, max_val, val):
+    def un_min_max_scaler(cls, min_val, max_val, val):
         return val * (max_val - min_val) + min_val
 
 """InpSeqMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max"""
@@ -50,7 +49,7 @@ class InpSeqMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         self.mult_high = 0
         self.mult_low = 0
         for i_f in range(len(data_source)):
-            for i_c in range(len([data_source[i_f]])):
+            for i_c in range(len(data_source[i_f])):
                 if data_sources_data_type[i_f][i_c] != -1:
                     min_inp_seq, max_inp_seq = self.min_max_data(data_source[i_f], i_c - self.sequence_length, i_c, self.data_indexes)
                     range_inp_seq = max_inp_seq - min_inp_seq
@@ -58,22 +57,22 @@ class InpSeqMinMaxScaler(NormalizerBase, MinMaxScalerBase):
                     output_max = max([data_source[i_f][i_c][data_index] for data_index in self.data_indexes])
                     output_min = min([data_source[i_f][i_c][data_index] for data_index in self.data_indexes])
 
-                    # определяем, во сколько максимум и минимум выхода расширяет диапазон входной последовательности
-                    if output_max > max_inp_seq:
-                        curr_mult_high = 1 - (output_max - min_inp_seq) / range_inp_seq
-                        if curr_mult_high > self.mult_high:
-                            self.mult_high = curr_mult_high
-
-                    if output_max > max_inp_seq:
-                        curr_mult_low = 1 - (max_inp_seq - output_min) / range_inp_seq
+                    # определяем, во сколько минимум и максимум выхода расширяет диапазон входной последовательности
+                    if output_min < min_inp_seq:
+                        curr_mult_low = (max_inp_seq - output_min) / range_inp_seq - 1
                         if curr_mult_low > self.mult_low:
                             self.mult_low = curr_mult_low
+
+                    if output_max > max_inp_seq:
+                        curr_mult_high = (output_max - min_inp_seq) / range_inp_seq - 1
+                        if curr_mult_high > self.mult_high:
+                            self.mult_high = curr_mult_high
 
     def normalize(self, inp_sequence, output = None):
         min_inp_seq, max_inp_seq = self.min_max_data(inp_sequence, 0, len(inp_sequence), self.data_indexes)
         range_inp_seq = max_inp_seq - min_inp_seq
-        norm_min = min_inp_seq - range_inp_seq * (self.mult_low * self.over_rate)
-        norm_max = max_inp_seq + range_inp_seq * (self.mult_high * self.over_rate)
+        norm_min = min_inp_seq - range_inp_seq * (self.mult_low + self.mult_low * self.over_rate)
+        norm_max = max_inp_seq + range_inp_seq * (self.mult_high + self.mult_high * self.over_rate)
 
         normalized_inp_sequence = []
         for i in range(len(inp_sequence)):

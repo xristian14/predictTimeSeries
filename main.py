@@ -9,6 +9,58 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
 
+sequence_length = 7
+data_split_sequence_length = 2
+validation_split = 0.05
+test_split = 0.25
+first_file_offset = 10
+over_rate = 0
+data_sources_meta = [
+    features.DataSourceMeta(files=[
+            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 lim_0_30.csv",
+            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 lim_20_50.csv"
+        ], date_index = 0, data_indexes = [1,2,3,4,5],
+        normalizers=[
+            normalizers.InpSeqMinMaxScaler(data_indexes=[1,2,3,4], over_rate=over_rate),
+            normalizers.InpSeqMinMaxScaler(data_indexes=[5], over_rate=over_rate)
+        ]),
+    features.DataSourceMeta(files=[
+            "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_0_30.csv",
+            "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_20_50.csv"
+        ], date_index = 0, data_indexes = [1,2,3,4,5],
+        normalizers=[
+            normalizers.InpSeqMinMaxScaler(data_indexes=[1,2,3,4], over_rate=over_rate),
+            normalizers.InpSeqMinMaxScaler(data_indexes=[5], over_rate=over_rate)
+        ])
+]
+
+data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
+
+model = Sequential()
+model.add(Input((sequence_length, len(data_manager.x_learn[0][0]))))
+model.add(LSTM(32, return_sequences=True))
+model.add(LSTM(32))
+model.add(Dense(len(data_manager.x_learn[0][0])))
+model.summary()
+
+model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
+#"binary_crossentropy"
+history = model.fit(np.array(data_manager.x_learn), np.array(data_manager.y_learn), batch_size=32, epochs=1200, validation_data=(np.array(data_manager.x_valid), np.array(data_manager.y_valid)))
+
+plt.figure(figsize=(6,5))
+plt.plot(history.history['loss'][3:])
+plt.plot(history.history['val_loss'][3:])
+plt.show()
+
+print(f"длина обучающей выборки: {len(data_manager.x_learn)}")
+print(f"длина выборки валидации: {len(data_manager.x_valid)}")
+print(f"длина тестовой выборки: {len(data_manager.x_test)}")
+
+
+raise EOFError
+
+
+
 app_files_folder_name = "app_data"
 if not os.path.isdir(app_files_folder_name):
     os.makedirs(app_files_folder_name)
@@ -43,17 +95,7 @@ features.data_sources_paths = [ #источникики данных, состо
     # ]
 ]
 
-first_file_offset = 0
-data_sources_meta = [
-    features.DataSourceMeta(files=[
-            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_0-40.csv",
-            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_25-65.csv"
-        ], date_index = 0, data_indexes = [1,2,3,4,5],
-        normalizers=[
-            normalizers.InpSeqMinMaxScaler(data_indexes=[1,2,3,4], over_rate=0.05),
-            normalizers.InpSeqMinMaxScaler(data_indexes=[5], over_rate=0.05)
-        ])
-]
+
 is_load_model = False #загружать модель нейронной сети с файла
 model_path = "" #путь к файлу модели нейронной сети
 features.normalize_method = features.normalize_min_max_scaler #метод нормализации данных
