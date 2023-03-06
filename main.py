@@ -50,8 +50,8 @@ data_sources_meta = [
             "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_25-65.csv"
         ], date_index = 0, data_indexes = [1,2,3,4,5],
         normalizers=[
-            normalizers.InpSeqMinMaxScaler([1,2,3,4]),
-            normalizers.InpSeqMinMaxScaler([5])
+            normalizers.InpSeqMinMaxScaler(data_indexes=[1,2,3,4], over_rate=0.05),
+            normalizers.InpSeqMinMaxScaler(data_indexes=[5], over_rate=0.05)
         ])
 ]
 is_load_model = False #загружать модель нейронной сети с файла

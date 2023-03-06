@@ -148,23 +148,16 @@ class DataManager:
             for i_f in range(len(self.data_sources_data_type)):
                 for i_c in range(len(self.data_sources_data_type[i_f])):
                     if self.data_sources_data_type[i_f][i_c] != -1:
-                        data_sources_inp_sequences = []
-                        for i_ds in range(len(self.data_sources)):
-                            inp_sequence = []
-                            for i_seq in range(i_c - self.sequence_length):  # проходим по всем свечкам входной последовательности
-                                inp_sequence.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
-                            data_sources_inp_sequences.append(inp_sequence)
-
-                        finally_inp_seq = []
-                        for i_ds in range(len(self.data_sources)):
-                            for i_n in range(self.data_sources_meta[i_ds].normalizers):
-                                finally_inp_seq.append(self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_sequences[i_ds]))
-
-                        for i in range(i_c - self.sequence_length): # проходим по всем свечкам входной последовательности
-                            single_data = []
-                            for i_ds in range(len(self.data_sources)):
-                                for i_n in range(self.data_sources_meta[i_ds].normalizers):
-                                    single_data.append(self.data_sources_meta[i_ds].normalizers[i_n].normalize)
+                        x, y, data_sources_normalizers_settings = self.normalize_data_sources(i_f, i_c, True)
+                        if self.data_sources_data_type[i_f][i_c] == 0:
+                            self.x_learn.append(x)
+                            self.y_learn.append(y)
+                        elif self.data_sources_data_type[i_f][i_c] == 1:
+                            self.x_valid.append(x)
+                            self.y_valid.append(y)
+                        elif self.data_sources_data_type[i_f][i_c] == 2:
+                            self.x_test.append(x)
+                            self.y_test.append(y)
 
     """Нормализует данные: для каждого источника данных создается список с данными на каждый нормализатор данного источника данных, далее все списки объединяются в один список, элементы которого - списки (входные вектора), содержащие последовательно записанные данные всех нормализаторов, всех источников данных
     Возвращает: последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации в виде: settings[i_ds][i_normalize].
