@@ -43,6 +43,7 @@ features.data_sources_paths = [ #источникики данных, состо
     # ]
 ]
 
+first_file_offset = 0
 data_sources_meta = [
     features.DataSourceMeta(files=[
             "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01_lim_0-40.csv",

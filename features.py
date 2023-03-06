@@ -30,60 +30,80 @@ class DataManager:
                         data_line.append(float(list_line[i]))
                     data.append(data_line)
         return data
-    def __init__(self, data_sources_meta, sequence_length, data_split_sequence_length, validation_split, test_split):
-        self.__sequence_length = sequence_length
+    def __init__(self, data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split):
+        self.data_sources_meta = data_sources_meta
+        self.first_file_offset = first_file_offset # отступ в еденицах данных (свечках) от начала первого файла. (на случай если это экспирируемые фьючерсные контракты, и файлы с данными имеют запас перед главными торговыми датами данного контракта, чтобы обучение и тестирование выполнялось в главные торговые даты данного контракта.) (впоследствии, если это экспирируемые фьючерсные контракты, данные для следующих файлов будут выбираться как следующая дата за последней датой предыдущего файла.)
+        self.sequence_length = sequence_length
+        self.data_split_sequence_length = data_split_sequence_length
+        self.validation_split = validation_split
+        self.test_split = test_split
+
         # определяем имена файлов без полных путей
-        self.__data_sources_file_names = []  # имена файлов источников данных без полного пути
+        self.data_sources_file_names = []  # имена файлов источников данных без полного пути
         for i_ds in range(len(data_sources_meta)):
             data_source_file_names = []
             for i_f in range(len(data_sources_meta[i_ds].files)):
                 file_name = data_sources_meta[i_ds].files[i_f].replace("\\", "/").split("/")[-1]
                 data_source_file_names.append(file_name)
-            self.__data_sources_file_names.append(data_source_file_names)
+            self.data_sources_file_names.append(data_source_file_names)
+
         # считываем источники данных
-        self.__data_sources = []  # данные всех файлов всех источников данных
+        self.data_sources = []  # данные всех файлов всех источников данных
         for i_ds in range(len(data_sources_meta)):
-            self.__data_sources.append([self.read_csv_file(file_path, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file_path in data_sources_meta[i_ds].files])
+            self.data_sources.append([self.read_csv_file(file_path, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file_path in data_sources_meta[i_ds].files])
+
         # проверяем, совпадает ли: количество файлов у разных источников данных, количество данных в файлах разных источников данных, даты в данных разных источников данных
         is_files_fit = True
         error_messages = []
-        if len(self.__data_sources) > 1:
+        if len(self.data_sources) > 1:
             # количество файлов у разных источников данных
-            for i_ds in range(1, len(self.__data_sources)):
-                if len(self.__data_sources[i_ds]) != len(self.__data_sources[0]):
+            for i_ds in range(1, len(self.data_sources)):
+                if len(self.data_sources[i_ds]) != len(self.data_sources[0]):
                     is_files_fit = False
-                    error_messages.append(f"Не совпадает количество файлов у источников данных: {self.__data_sources_file_names[i_ds]} и {self.__data_sources_file_names[0]}.")
+                    error_messages.append(f"Не совпадает количество файлов у источников данных: {self.data_sources_file_names[i_ds]} и {self.data_sources_file_names[0]}.")
             # количество данных в файлах разных источников данных
             if is_files_fit:
-                for i_f in range(len(self.__data_sources[0])):
-                    for i_ds in range(1, len(self.__data_sources)):
-                        if len(self.__data_sources[i_ds][i_f]) != len(self.__data_sources[0][i_f]):
+                for i_f in range(len(self.data_sources[0])):
+                    for i_ds in range(1, len(self.data_sources)):
+                        if len(self.data_sources[i_ds][i_f]) != len(self.data_sources[0][i_f]):
                             is_files_fit = False
-                            error_messages.append(f"Не совпадает количество свечек в файлах разных источников данных: {self.__data_sources_file_names[i_ds][i_f]} и {self.__data_sources_file_names[0][i_f]}.")
+                            error_messages.append(f"Не совпадает количество свечек в файлах разных источников данных: {self.data_sources_file_names[i_ds][i_f]} и {self.data_sources_file_names[0][i_f]}.")
             # даты в свечках разных источников данных
             if is_files_fit:
-                for i_f in range(len(self.__data_sources[0])):
-                    for i_c in range(len(self.__data_sources[0][i_f])):
-                        for i_ds in range(1, len(self.__data_sources)):
-                            if self.__data_sources[i_ds][i_f][i_c][0] != self.__data_sources[0][i_f][i_c][0]:
+                for i_f in range(len(self.data_sources[0])):
+                    for i_c in range(len(self.data_sources[0][i_f])):
+                        for i_ds in range(1, len(self.data_sources)):
+                            if self.data_sources[i_ds][i_f][i_c][0] != self.data_sources[0][i_f][i_c][0]:
                                 is_files_fit = False
-                                error_messages.append(f"Не совпадают даты в данных разных источников данных: (файл={self.__data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={self.__data_sources[i_ds][i_f][i_c][0]}) и (файл={self.__data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={self.__data_sources[0][i_f][i_c][0]}).")
+                                error_messages.append(f"Не совпадают даты в данных разных источников данных: (файл={self.data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={self.data_sources[i_ds][i_f][i_c][0]}) и (файл={self.data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={self.data_sources[0][i_f][i_c][0]}).")
+
         # выводим ошибки
         for message in error_messages:
             print(message)
-        # если не было ошибок,  и формируем обучающие, валидационные и тестовые данные
+
+        # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
         if is_files_fit:
             # опредлеяем типы данных для всех свечек
-            self.__data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не имеет входной последовательности)]. Нет разделения на источники данных, т.к. тип свечки относится ко всем источникам данных
+            self.data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
             learn_count = 0
             valid_count = 0
             test_count = 0
             sequence_number = 0
             data_types = [0, 1, 2]
             data_type = data_types[random.randint(0, 2)]
-            for i_f in range(len(self.__data_sources[0])):
+            last_file_date = None
+            for i_f in range(len(self.data_sources[0])):
                 file_data_types = []
-                for i_c in range(len(self.__data_sources[0][i_f])):
+                for i_c in range(len(self.data_sources[0][i_f])):
+                    is_next_date = False
+                    if last_file_date != None:
+                        if self.data_sources[0][i_f][i_c][0] > last_file_date:
+                            is_next_date = True
+                            last_file_date = self.data_sources[0][i_f][i_c][0]
+                    else:
+                        last_file_date = self.data_sources[0][i_f][i_c][0]
+                        is_next_date = True
+
                     if sequence_number >= data_split_sequence_length:
                         sequence_number = 0
                         # выбираем случайный тип среди тех, которые составляют от всех данных меньшую часть чем указано для них, если ни один из типов не является меньше указанного, выбираем случайный тип
@@ -99,7 +119,8 @@ class DataManager:
                             data_type = random.choice(data_types_less_than_split)
                         else:
                             data_type = data_types[random.randint(0, 2)]
-                    if i_c >= sequence_length:
+
+                    if i_c >= sequence_length and (i_c >= first_file_offset if i_f == 0 else True) and is_next_date:
                         file_data_types.append(data_type)
                         if data_type == data_types[0]:
                             learn_count += 1
@@ -109,31 +130,22 @@ class DataManager:
                             test_count += 1
                         sequence_number += 1
                     else:
-                        file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length, отмечаем что она не относится ни к какой выборке
-                self.__data_sources_data_type.append(file_data_types)
+                        file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length или это первый файл и мы не отошли от начала на first_file_offset или текущая свечка не является следующей за последней датой, отмечаем что она не относится ни к одной выборке
+                self.data_sources_data_type.append(file_data_types)
+
+            # выполняем подготовку нормализаторов
+            for i_ds in range(len(data_sources_meta)):
+                for i_n in range(len(data_sources_meta[i_ds].normalizers)):
+                    data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources, self.data_sources_data_type, self.sequence_length)
+
             # формируем обучающие, валидационные и тестовые данные
-            global X_learn
-            global Y_learn
-            global X_valid
-            global Y_valid
-            global X_test
-            global Y_test
+            self.x_learn = []
+            self.y_learn = []
+            self.x_valid = []
+            self.y_valid = []
+            self.x_test = []
+            self.y_test = []
 
-    @property
-    def sequence_length(self):
-        return self.__sequence_length
-
-    @property
-    def data_sources_file_names(self):
-        return self.__data_sources_file_names
-
-    @property
-    def data_sources(self):
-        return self.__data_sources
-
-    @property
-    def data_sources_data_type(self):
-        return self.__data_sources_data_type
 
 # --------------------------------------------------------------------------------
 

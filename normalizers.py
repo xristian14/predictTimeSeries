@@ -17,6 +17,6 @@ class InpSeqMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         self.__data_indexes = data_indexes
 
     # data_indexes - индексы значений в data_source, для которых будет выполняться нормализация
-    # ds_files_indexes - список с кортежами: (начало, конец) на каждый файл источника данных, указывающих для каких данных файла будет выполняться нормализация
-    def summary(self, data_source, ds_files_indexes, sequence_length):
+    # data_sources_data_type - тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
+    def summary(self, data_source, data_sources_data_type, sequence_length):
         pass
