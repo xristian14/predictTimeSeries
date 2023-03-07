@@ -48,13 +48,14 @@ class RelativeMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         self.is_high_part = is_high_part
         self.is_low_part = is_low_part
         self.over_rate = over_rate
-        self.norm_data_length = len(data_indexes)
+        self.inp_norm_data_length = len(data_indexes)
         if is_range_part:
-            self.norm_data_length += 1
+            self.inp_norm_data_length += 1
         if is_high_part:
-            self.norm_data_length += 1
+            self.inp_norm_data_length += 1
         if is_low_part:
-            self.norm_data_length += 1
+            self.inp_norm_data_length += 1
+        self.out_norm_data_length = len(data_indexes)
 
     # data_sources_data_type - тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
     def summary(self, data_source, data_sources_data_type, sequence_length):

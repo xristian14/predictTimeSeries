@@ -212,7 +212,7 @@ class DataManager:
             normalizers_out = []
             normalizers_settings = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output)
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds])
                 normalizers_inp_seq.append(x)
                 normalizers_out.append(y)
                 normalizers_settings.append(n_setting)
@@ -237,7 +237,23 @@ class DataManager:
 
         return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
-    def predict_data(self, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction):
+    def denormalize_data_sources(self, data_sources_normalizers_settings, inp_seq_data_sources=None, output_data_sources=None):
+        pass
+
+    def norm_output_vector_to_data_sources(self, output):
+        index = 0
+        output_data_sources = []
+        for i_ds in range(len(self.data_sources_meta)):
+            output_data_source = []
+            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length):
+                    output_data_source.extend(copy.deepcopy(output[i]))
+                index += self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length
+            output_data_sources.append(output_data_source)
+        return output_data_sources
+
+    def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction):
+        self.model = model
         self.predict_length = predict_length
         self.is_save_predict_data = is_save_predict_data
         self.part_learn_predict = part_learn_predict
@@ -246,6 +262,13 @@ class DataManager:
         self.part_test_predict_visualize = part_test_predict_visualize
         self.is_visualize_prediction = is_visualize_prediction
 
+        self.data_sources_predict = []
+        for i_ds in range(len(self.data_sources)):
+            self.data_sources_predict.append([])
+            for i_f in range(len(self.data_sources[i_ds])):
+                self.data_sources_predict[i_ds].append([])
+                for i_c in range(len(self.data_sources[i_ds][i_f])):
+                    self.data_sources_predict[i_ds][i_f].append(None)
         # выполняем прогнозирование
         for i_f in range(len(self.data_sources[0])):
             for i_c in range(len(self.data_sources[0][i_f])):
@@ -260,19 +283,60 @@ class DataManager:
                             is_let_in = True
 
                     if is_let_in:
-                        for i_p in range(len(self.predict_length)):
-                            #формируем входную последовательность для всех источников данных
+                        predict_data_sources = []
+
+                        for i_p in range(self.predict_length):
+                            # формируем входную последовательность для всех источников данных
                             data_sources_inp_seq = []
+                            true_data_length = max(self.sequence_length - i_p, 0) # количество данных которые нужно взять из источников данных
+                            predict_data_length = sequence_length - true_data_length # количество данных которые нужно взять из спрогнозированных данных
                             for i_ds in range(len(self.data_sources)):
                                 data_source_inp_seq = []
-                                for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
+                                for i_seq in range(i_c - self.sequence_length + i_p + 1, i_c - self.sequence_length + i_p + 1 + true_data_length):
                                     data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+                                for i_seq in range(i_p - predict_data_length + 1, i_p + 1):
+                                    data_source_inp_seq.append(copy.deepcopy(predict_data_sources[i_ds][i_f][i_seq]))
                                 data_sources_inp_seq.append(data_source_inp_seq)
 
                             x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq)
+                            x_np = np.array(x)
+                            inp = x_np.reshape(1, self.sequence_length, len(x[0]))
+                            pred = model.predict(inp, verbose=0)
+                            pred_list = pred[0].tolist()
+
+                            # разбираем выходной вектор на источники данных
+                            output_data_sources = self.norm_output_vector_to_data_sources(pred_list)
+                            denormalized_output_data_sources = self.denormalize_data_sources(data_sources_normalizers_settings, output_data_sources=output_data_sources)
+
+
+
+                        predict_sequence = []
+                        for k in range(predict_length):
+                            input_sequence = []
+                            s_index = k
+                            e_index = s_index + sequence_length
+                            for u in range(s_index, min(e_index, sequence_length)):
+                                input_list = []
+                                for m in range(len(normalized_candle_files)):
+                                    input_list += normalized_candle_files[m][candle_index + u - sequence_length][1:]
+                                input_sequence.append(input_list)
+                            for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
+                                input_list = []
+                                for m in range(len(normalized_candle_files)):
+                                    input_list += list(predict_sequence[u][0][m * 5:(m + 1) * 5])
+                                input_sequence.append(input_list)
+                            x = np.array(input_sequence)
+                            inp = x.reshape(1, sequence_length, len(input_sequence[0]))
+                            pred = model.predict(inp, verbose=0)
+                            predict_sequence.append(pred)
+                            # print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
+                        if is_learn:
+                            learn_predict[i] = predict_sequence
+                        else:
+                            test_predict[i] = predict_sequence
 
         #---------------------------------------------------------------------------------------------
-        global normalized_candle_files
+        #global normalized_candle_files
         # прогнозирование для обучающих данных
         learn_images_folder_path = f"{save_folder_path}/images/learn"
         test_images_folder_path = f"{save_folder_path}/images/test"

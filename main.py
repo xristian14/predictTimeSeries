@@ -63,7 +63,7 @@ print(f"длина обучающей выборки: {len(data_manager.x_learn)
 print(f"длина выборки валидации: {len(data_manager.x_valid)}")
 print(f"длина тестовой выборки: {len(data_manager.x_test)}")
 
-data_manager.predict_data(predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction)
+data_manager.predict_data(model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction)
 
 
 raise EOFError
