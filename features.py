@@ -30,7 +30,28 @@ class DataManager:
                         data_line.append(float(list_line[i]))
                     data.append(data_line)
         return data
+
+    def create_save_folders(self):
+        app_files_folder_name = "app_data"
+        if not os.path.isdir(app_files_folder_name):
+            os.makedirs(app_files_folder_name)
+        folder_id = 0
+        while os.path.isdir(f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"):
+            folder_id += 1
+        self.folder_base = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
+        self.folder_images_learn_predict = f"{self.folder_base}/images/learn_predict"
+        self.folder_images_test_predict = f"{self.folder_base}/images/test_predict"
+        self.folder_images_learn_result = f"{self.folder_base}/images/learn_result"
+        os.makedirs(self.folder_base)
+        os.makedirs(f"{self.folder_base}/images")
+        os.makedirs(self.folder_images_learn_predict)
+        os.makedirs(self.folder_images_test_predict)
+        os.makedirs(self.folder_images_learn_result)
+
     def __init__(self, data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split):
+        # создаем папки для сохранения информации
+        self.create_save_folders()
+
         self.data_sources_meta = data_sources_meta
         self.first_file_offset = first_file_offset # отступ в еденицах данных (свечках) от начала первого файла. (на случай если это экспирируемые фьючерсные контракты, и файлы с данными имеют запас перед главными торговыми датами данного контракта, чтобы обучение и тестирование выполнялось в главные торговые даты данного контракта.) (впоследствии, если это экспирируемые фьючерсные контракты, данные для следующих файлов будут выбираться как следующая дата за последней датой предыдущего файла.)
         self.sequence_length = sequence_length
@@ -152,7 +173,19 @@ class DataManager:
             for i_f in range(len(self.data_sources_data_type)):
                 for i_c in range(len(self.data_sources_data_type[i_f])):
                     if self.data_sources_data_type[i_f][i_c] != -1:
-                        x, y, data_sources_normalizers_settings = self.normalize_data_sources(i_f, i_c, True)
+
+                        data_sources_inp_seq = []
+                        for i_ds in range(len(self.data_sources)):
+                            data_source_inp_seq = []
+                            for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
+                                data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+                            data_sources_inp_seq.append(data_source_inp_seq)
+
+                        data_sources_output = []
+                        for i_ds in range(len(self.data_sources)):
+                            data_sources_output.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_c]))
+
+                        x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
                         if self.data_sources_data_type[i_f][i_c] == 0:
                             self.x_learn.append(x)
                             self.y_learn.append(y)
@@ -165,17 +198,11 @@ class DataManager:
         else:
             raise ValueError(error_messages[0])
 
-    """Нормализует данные: для каждого источника данных создается список с данными на каждый нормализатор данного источника данных, далее все списки объединяются в один список, элементы которого - списки (входные вектора), содержащие последовательно записанные данные всех нормализаторов, всех источников данных
-    Возвращает: последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации в виде: settings[i_ds][i_normalize].
-    Независимо от значения is_output, во входную последовательность не будет включена свечка с индексом i_c, она является свечкой выходного значения"""
-    def normalize_data_sources(self, i_f, i_c, is_output):
-        data_sources_inp_seq = []
-        for i_ds in range(len(self.data_sources)):
-            data_source_inp_seq = []
-            for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
-                data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
-            data_sources_inp_seq.append(data_source_inp_seq)
 
+    """нормализует входные последовательности для всех источников данных, а так же выходное значение если оно указано
+    data_sources_inp_seq - последовательности входных данных для всех источников данных
+    возвращает последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации вида: settings[i_ds][i_normalize]."""
+    def normalize_data_sources(self, data_sources_inp_seq, data_sources_output=None):
         data_sources_normalizers_inp_seq = []
         data_sources_normalizers_out = []
         data_sources_normalizers_settings = []
@@ -185,7 +212,7 @@ class DataManager:
             normalizers_out = []
             normalizers_settings = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], self.data_sources[i_ds][i_f][i_c] if is_output else None)
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output)
                 normalizers_inp_seq.append(x)
                 normalizers_out.append(y)
                 normalizers_settings.append(n_setting)
@@ -203,16 +230,98 @@ class DataManager:
             finally_inp_seq.append(one_data)
 
         finally_out_seq = []
-        if is_output:
+        if data_sources_output != None:
             for i_ds in range(len(data_sources_normalizers_out)):
                 for i_n in range(len(data_sources_normalizers_out[i_ds])):
                     finally_out_seq.extend(data_sources_normalizers_out[i_ds][i_n])
 
         return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
-class PredictManager:
-    def __init__(self):
-        pass
+    def predict_data(self, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction):
+        self.predict_length = predict_length
+        self.is_save_predict_data = is_save_predict_data
+        self.part_learn_predict = part_learn_predict
+        self.part_test_predict = part_test_predict
+        self.part_learn_predict_visualize = part_learn_predict_visualize
+        self.part_test_predict_visualize = part_test_predict_visualize
+        self.is_visualize_prediction = is_visualize_prediction
+
+        # выполняем прогнозирование
+        for i_f in range(len(self.data_sources[0])):
+            for i_c in range(len(self.data_sources[0][i_f])):
+                if self.data_sources_data_type[i_f][i_c] != -1:
+                    is_let_in = is_save_predict_data
+                    if not is_let_in and self.data_sources_data_type[i_f][i_c] != 1:
+                        probability = part_learn_predict
+                        if self.data_sources_data_type[i_f][i_c] == 2:
+                            probability = part_test_predict
+                        rand = random.random()
+                        if rand <= probability:
+                            is_let_in = True
+
+                    if is_let_in:
+                        for i_p in range(len(self.predict_length)):
+                            #формируем входную последовательность для всех источников данных
+                            data_sources_inp_seq = []
+                            for i_ds in range(len(self.data_sources)):
+                                data_source_inp_seq = []
+                                for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
+                                    data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+                                data_sources_inp_seq.append(data_source_inp_seq)
+
+                            x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq)
+
+        #---------------------------------------------------------------------------------------------
+        global normalized_candle_files
+        # прогнозирование для обучающих данных
+        learn_images_folder_path = f"{save_folder_path}/images/learn"
+        test_images_folder_path = f"{save_folder_path}/images/test"
+        os.makedirs(learn_images_folder_path)
+        os.makedirs(test_images_folder_path)
+        learn_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
+        test_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
+        for i in range(len(X_learn_indexes) + len(X_test_indexes)):
+            if i < len(X_learn_indexes):
+                is_learn = True
+                candle_index = X_learn_indexes[i]
+            else:
+                is_learn = False
+                candle_index = X_test_indexes[i - len(X_learn_indexes)]
+            if candle_index <= len(normalized_candle_files[0]) - predict_length:  # если от последней свечки есть отступ в predict_length
+                rand = random.random()
+                if (is_learn and rand <= part_learn_predict) or (not is_learn and rand <= part_test_predict):
+                    predict_sequence = []
+                    for k in range(predict_length):
+                        input_sequence = []
+                        s_index = k
+                        e_index = s_index + sequence_length
+                        for u in range(s_index, min(e_index, sequence_length)):
+                            input_list = []
+                            for m in range(len(normalized_candle_files)):
+                                input_list += normalized_candle_files[m][candle_index + u - sequence_length][1:]
+                            input_sequence.append(input_list)
+                        for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
+                            input_list = []
+                            for m in range(len(normalized_candle_files)):
+                                input_list += list(predict_sequence[u][0][m * 5:(m + 1) * 5])
+                            input_sequence.append(input_list)
+                        x = np.array(input_sequence)
+                        inp = x.reshape(1, sequence_length, len(input_sequence[0]))
+                        pred = model.predict(inp, verbose=0)
+                        predict_sequence.append(pred)
+                        # print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
+                    if is_learn:
+                        learn_predict[i] = predict_sequence
+                    else:
+                        test_predict[i] = predict_sequence
+                    # print(f"candle_files[{0}][{i}:{i + sequence_length + predict_length}]={candle_files[0][i:i + sequence_length + predict_length]}")
+                    # print(f"normalized_candle_files[{0}][{i}:{i + sequence_length + predict_length}]={normalized_candle_files[0][i:i + sequence_length + predict_length]}")
+                    # print(f"predict_sequence={predict_sequence}")
+                    # input()
+                    # визуализируем и сохраняем в файл
+                    if is_visualize_prediction:
+                        folder_path = learn_images_folder_path if is_learn else test_images_folder_path
+                        visualize_predict_to_file(candle_index, sequence_length, predict_length, predict_sequence, folder_path)
 
 # --------------------------------------------------------------------------------
 
