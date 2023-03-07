@@ -35,24 +35,45 @@ class MinMaxScalerBase:
     def un_min_max_scaler(cls, min_val, max_val, val):
         return val * (max_val - min_val) + min_val
 
-"""InpSeqMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max"""
-class InpSeqMinMaxScaler(NormalizerBase, MinMaxScalerBase):
+"""RelativeMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max"""
+class RelativeMinMaxScaler(NormalizerBase, MinMaxScalerBase):
     # data_indexes - индексы значений в data_source, для которых будет выполняться нормализация
     # over_rate - часть от увеличения диапазона под выходное значение, на которую диапазон для нормализации будет больше. 0.1 - увеличение диапазона будет на 10% больше
-    def __init__(self, data_indexes, over_rate):
+    # is_range_part - добавлять ли во входную последовательность значение, указывающее какой размер составляет диапазон значений текущей входной последовательности относительно максимального диапазона
+    # is_high_part - добавлять ли во входную последовательность значение, указывающее какую часть от максимально возможного значения составляет максимальное значение входной последовательности
+    # is_low_part - добавлять ли во входную последовательность значение, указывающее какую часть от максимально возможного значения составляет минимальное значение входной последовательности
+    def __init__(self, data_indexes, is_range_part, is_high_part, is_low_part, over_rate):
         self.data_indexes = data_indexes
+        self.is_range_part = is_range_part
+        self.is_high_part = is_high_part
+        self.is_low_part = is_low_part
         self.over_rate = over_rate
+        self.norm_data_length = len(data_indexes)
+        if is_range_part:
+            self.norm_data_length += 1
+        if is_high_part:
+            self.norm_data_length += 1
+        if is_low_part:
+            self.norm_data_length += 1
 
     # data_sources_data_type - тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
     def summary(self, data_source, data_sources_data_type, sequence_length):
         self.sequence_length = sequence_length
-        self.mult_high = 0
         self.mult_low = 0
+        self.mult_high = 0
+        self.max_range = 0
+        self.max_value = 0
         for i_f in range(len(data_source)):
             for i_c in range(len(data_source[i_f])):
                 if data_sources_data_type[i_f][i_c] != -1:
                     min_inp_seq, max_inp_seq = self.min_max_data(data_source[i_f], i_c - self.sequence_length, i_c, self.data_indexes)
                     range_inp_seq = max_inp_seq - min_inp_seq
+
+                    if range_inp_seq > self.max_range:
+                        self.max_range = range_inp_seq
+
+                    if max_inp_seq > self.max_value:
+                        self.max_value = max_inp_seq
 
                     output_max = max([data_source[i_f][i_c][data_index] for data_index in self.data_indexes])
                     output_min = min([data_source[i_f][i_c][data_index] for data_index in self.data_indexes])
@@ -79,6 +100,12 @@ class InpSeqMinMaxScaler(NormalizerBase, MinMaxScalerBase):
             input = []
             for dat_ind in self.data_indexes:
                 input.append(self.min_max_scaler(norm_min, norm_max, inp_sequence[i][dat_ind]))
+            if self.is_range_part:
+                input.append(range_inp_seq / self.max_range)
+            if self.is_high_part:
+                input.append(max_inp_seq / self.max_value)
+            if self.is_low_part:
+                input.append(min_inp_seq / self.max_value)
             normalized_inp_sequence.append(input)
 
         normalized_output = []
@@ -100,13 +127,13 @@ class InpSeqMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         if normalized_inp_sequence != None:
             for i in range(len(normalized_inp_sequence)):
                 input = []
-                for dat_ind in self.data_indexes:
-                    input.append(self.un_min_max_scaler(norm_min, norm_max, normalized_inp_sequence[i][dat_ind]))
+                for index in range(len(self.data_indexes)):
+                    input.append(self.un_min_max_scaler(norm_min, norm_max, normalized_inp_sequence[i][index]))
                 denormalized_inp_sequence.append(input)
 
         denormalized_output = []
         if normalized_output != None:
-            for dat_ind in self.data_indexes:
-                denormalized_output.append(self.un_min_max_scaler(norm_min, norm_max, normalized_output[dat_ind]))
+            for index in range(len(self.data_indexes)):
+                denormalized_output.append(self.un_min_max_scaler(norm_min, norm_max, normalized_output[index]))
 
         return denormalized_inp_sequence, denormalized_output

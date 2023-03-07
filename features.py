@@ -11,7 +11,7 @@ class DataSourceMeta:
         self.files = files # список с файлами
         self.date_index = date_index # индекс даты
         self.data_indexes = data_indexes # индексы данных, которые нужно считать из файла
-        self.normalizers = normalizers
+        self.normalizers = normalizers # список с нормализаторами для источника данных
 
 class DataManager:
     @classmethod
@@ -210,6 +210,9 @@ class DataManager:
 
         return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
+class PredictManager:
+    def __init__(self):
+        pass
 
 # --------------------------------------------------------------------------------
 

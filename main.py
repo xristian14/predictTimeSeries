@@ -9,28 +9,35 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
 
-sequence_length = 7
-data_split_sequence_length = 2
-validation_split = 0.05
-test_split = 0.25
-first_file_offset = 10
-over_rate = 0
+data_split_sequence_length = 2 # данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
+validation_split = 0.05 # размер данных для валидации относительно всех данных
+test_split = 0.25 # размер тестовых данных относительно всех данных
+sequence_length = 7 # длина последовательных данных для которых делается прогноз следующего значения
+predict_length = 50 #количество шагов на которое будут спрогнозированы данные
+part_learn_predict = 0.2 #часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+part_test_predict = 0.5 #часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+part_learn_predict_visualize = 0.5 #часть от спрогнозированных данных, которые нужно визуализировать в файлы
+part_test_predict_visualize = 0.5 #часть от спрогнозированных данных, которые нужно визуализировать в файлы
+is_visualize_prediction = True #визуализировать спрогнозированные последовательности, и сохранить в файлы
+is_save_prediction_data = False #сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных, включая валидационные. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
+first_file_offset = 10 # отступ от начала данных первого файла в источниках данных
+over_rate = 0 #подставляю это значение в параметр нормализаторов, определяет насколько больше будет диапазон нормализации относительно формата: вплотную, 0.1 - на 10% больше
 data_sources_meta = [
     features.DataSourceMeta(files=[
             "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 lim_0_30.csv",
             "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 lim_20_50.csv"
         ], date_index = 0, data_indexes = [1,2,3,4,5],
         normalizers=[
-            normalizers.InpSeqMinMaxScaler(data_indexes=[1,2,3,4], over_rate=over_rate),
-            normalizers.InpSeqMinMaxScaler(data_indexes=[5], over_rate=over_rate)
+            normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
+            normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
         ]),
     features.DataSourceMeta(files=[
             "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_0_30.csv",
             "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_20_50.csv"
         ], date_index = 0, data_indexes = [1,2,3,4,5],
         normalizers=[
-            normalizers.InpSeqMinMaxScaler(data_indexes=[1,2,3,4], over_rate=over_rate),
-            normalizers.InpSeqMinMaxScaler(data_indexes=[5], over_rate=over_rate)
+            normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
+            normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
         ])
 ]
 
@@ -40,12 +47,12 @@ model = Sequential()
 model.add(Input((sequence_length, len(data_manager.x_learn[0][0]))))
 model.add(LSTM(32, return_sequences=True))
 model.add(LSTM(32))
-model.add(Dense(len(data_manager.x_learn[0][0])))
+model.add(Dense(len(data_manager.y_learn[0])))
 model.summary()
 
 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
 #"binary_crossentropy"
-history = model.fit(np.array(data_manager.x_learn), np.array(data_manager.y_learn), batch_size=32, epochs=1200, validation_data=(np.array(data_manager.x_valid), np.array(data_manager.y_valid)))
+history = model.fit(np.array(data_manager.x_learn), np.array(data_manager.y_learn), batch_size=32, epochs=100, validation_data=(np.array(data_manager.x_valid), np.array(data_manager.y_valid)))
 
 plt.figure(figsize=(6,5))
 plt.plot(history.history['loss'][3:])
