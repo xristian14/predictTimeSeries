@@ -310,7 +310,7 @@ class DataManager:
             input_data_sources_normalizers.append(data_source_normalizers)
         return input_data_sources_normalizers
 
-    def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction):
+    def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single):
         self.model = model
         self.predict_length = predict_length
         self.is_save_predict_data = is_save_predict_data
@@ -318,15 +318,11 @@ class DataManager:
         self.part_test_predict = part_test_predict
         self.part_learn_predict_visualize = part_learn_predict_visualize
         self.part_test_predict_visualize = part_test_predict_visualize
-        self.is_visualize_prediction = is_visualize_prediction
+        self.is_visualize_prediction_union = is_visualize_prediction_union
+        self.is_visualize_prediction_single = is_visualize_prediction_single
 
-        self.data_sources_predict = []
-        for i_ds in range(len(self.data_sources)):
-            self.data_sources_predict.append([])
-            for i_f in range(len(self.data_sources[i_ds])):
-                self.data_sources_predict[i_ds].append([])
-                for i_c in range(len(self.data_sources[i_ds][i_f])):
-                    self.data_sources_predict[i_ds][i_f].append(None)
+        self.data_sources_predict = [[[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))] for i_ds in range(len(self.data_sources))]
+
         # выполняем прогнозирование
         for i_f in range(len(self.data_sources[0])):
             for i_c in range(len(self.data_sources[0][i_f])):
@@ -375,6 +371,21 @@ class DataManager:
                                 data_sources_out_denorm[i_ds_pr].insert(0, next_date)
                                 predict_data_sources[i_ds_pr].append(data_sources_out_denorm[i_ds_pr])
 
+                        for i_ds in range(len(self.data_sources)):
+                            self.data_sources_predict[i_ds][i_f][i_c] = predict_data_sources[i_ds]
+
+        # визуализируем прогнозирование
+        if self.is_visualize_prediction_union or self.is_visualize_prediction_single:
+            for i_f in range(len(self.data_sources_predict[0])):
+                for i_c in range(len(self.data_sources_predict[0][i_f])):
+                    if self.data_sources_predict[0][i_f][i_c] != None:
+                        if self.data_sources_data_type[i_f][i_c] != -1 and self.data_sources_data_type[i_f][i_c] != 1 and len(self.data_sources_data_type[i_f][i_c]) - i_c > self.predict_length:
+                            probability = self.part_learn_predict_visualize
+                            if self.data_sources_data_type[i_f][i_c] == 2:
+                                probability = self.part_test_predict_visualize
+                            rand = random.random()
+                            if rand <= probability:
+                                pass
 
 
         #---------------------------------------------------------------------------------------------
