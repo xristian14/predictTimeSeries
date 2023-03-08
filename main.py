@@ -55,8 +55,11 @@ model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsolut
 history = model.fit(np.array(data_manager.x_learn), np.array(data_manager.y_learn), batch_size=32, epochs=100, validation_data=(np.array(data_manager.x_valid), np.array(data_manager.y_valid)))
 
 plt.figure(figsize=(6,5))
-plt.plot(history.history['loss'][3:])
-plt.plot(history.history['val_loss'][3:])
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.show()
+plt.plot(history.history['loss'][10:])
+plt.plot(history.history['val_loss'][10:])
 plt.show()
 
 print(f"длина обучающей выборки: {len(data_manager.x_learn)}")

@@ -108,6 +108,13 @@ class DataManager:
 
         # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
         if is_files_fit:
+            self.data_interval = self.data_sources[0][0][1][0] - self.data_sources[0][0][0][0]
+            if len(self.data_sources[0][0]) > 9:
+                for i in range(9):
+                    if self.data_sources[0][0][i + 1][0] - self.data_sources[0][0][i][0] != self.data_interval:
+                        raise ValueError("При определении временного интервала данных, в первых 10 данных обнаружены разные временные интервалы.")
+            else:
+                raise ValueError("Количество данных в файле должно быть не менее 10.")
             # опредлеяем типы данных для всех свечек
             self.data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
             learn_count = 0
@@ -212,7 +219,7 @@ class DataManager:
             normalizers_out = []
             normalizers_settings = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds])
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds] if data_sources_output != None else None)
                 normalizers_inp_seq.append(x)
                 normalizers_out.append(y)
                 normalizers_settings.append(n_setting)
@@ -237,20 +244,71 @@ class DataManager:
 
         return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
-    def denormalize_data_sources(self, data_sources_normalizers_settings, inp_seq_data_sources=None, output_data_sources=None):
-        pass
+    """денормализует входные последовательности для всех нормализаторов, всех источников данных, а так же выходное значение если оно указано
+        input_vectors_sequence - последовательности входных данных для всех источников данных, для всех нормализаторов
+        возвращает входную последовательность для всех источников данных и выходное значение для всех источников данных"""
+    def denormalize_input_vectors_sequence_output_vector(self, data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=None):
+        data_sources_normalizers_inp_seq = self.input_vectors_sequence_to_data_sources_normalizers(input_vectors_sequence) if input_vectors_sequence != None else None
+        data_sources_normalizers_out = self.output_vector_to_data_sources_normalizers(output_vector) if output_vector != None else None
 
-    def norm_output_vector_to_data_sources(self, output):
-        index = 0
-        output_data_sources = []
-        for i_ds in range(len(self.data_sources_meta)):
-            output_data_source = []
+        data_sources_inp_seq_denorm = []
+        data_sources_out_denorm = []
+
+        for i_ds in range(len(self.data_sources)):
+            data_source_inp_seq_denorm = []
+            data_source_out_denorm = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                x, y = self.data_sources_meta[i_ds].normalizers[i_n].denormalize(data_sources_normalizers_settings[i_ds][i_n], normalized_inp_sequence=data_sources_normalizers_inp_seq[i_ds][i_n] if data_sources_normalizers_inp_seq != None else None, normalized_output = data_sources_normalizers_out[i_ds][i_n] if data_sources_normalizers_out != None else None)
+                data_source_inp_seq_denorm.extend(x)
+                data_source_out_denorm.extend(y)
+
+            data_sources_inp_seq_denorm.append(data_source_inp_seq_denorm)
+            data_sources_out_denorm.append(data_source_out_denorm)
+
+        # finally_inp_seq = []
+        # if inp_seq_data_sources != None:
+        #     for i_candle in range(len(data_sources_normalizers_inp_seq_denorm[0][0])):
+        #         one_data = []
+        #         for i_ds in range(len(data_sources_normalizers_inp_seq_denorm)):
+        #             for i_n in range(len(data_sources_normalizers_inp_seq_denorm[i_ds])):
+        #                 one_data.extend(data_sources_normalizers_inp_seq_denorm[i_ds][i_n][i_candle])
+        #         finally_inp_seq.append(one_data)
+        #
+        # finally_out_seq = []
+        # if output_data_sources != None:
+        #     for i_ds in range(len(data_sources_normalizers_out_denorm)):
+        #         for i_n in range(len(data_sources_normalizers_out_denorm[i_ds])):
+        #             finally_out_seq.extend(data_sources_normalizers_out_denorm[i_ds][i_n])
+
+        return data_sources_inp_seq_denorm, data_sources_out_denorm
+
+    def output_vector_to_data_sources_normalizers(self, output):
+        index = 0
+        output_data_sources_normalizers = []
+        for i_ds in range(len(self.data_sources_meta)):
+            data_source_normalizers = []
+            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                data_source_normalizer = []
                 for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length):
-                    output_data_source.extend(copy.deepcopy(output[i]))
+                    data_source_normalizer.append(copy.deepcopy(output[i]))
                 index += self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length
-            output_data_sources.append(output_data_source)
-        return output_data_sources
+                data_source_normalizers.append(data_source_normalizer)
+            output_data_sources_normalizers.append(data_source_normalizers)
+        return output_data_sources_normalizers
+
+    def input_vectors_sequence_to_data_sources_normalizers(self, input):
+        index = 0
+        input_data_sources_normalizers = []
+        for i_ds in range(len(self.data_sources_meta)):
+            data_source_normalizers = []
+            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                data_source_normalizer = []
+                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length):
+                    data_source_normalizer.append(copy.deepcopy(input[i]))
+                index += self.data_sources_meta[i_ds].normalizers[i_n].inp_norm_data_length
+                data_source_normalizers.append(data_source_normalizer)
+            input_data_sources_normalizers.append(data_source_normalizers)
+        return input_data_sources_normalizers
 
     def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction):
         self.model = model
@@ -284,18 +342,20 @@ class DataManager:
 
                     if is_let_in:
                         predict_data_sources = []
+                        for i_ds_pr in range(len(self.data_sources)):
+                            predict_data_sources.append([])
 
                         for i_p in range(self.predict_length):
                             # формируем входную последовательность для всех источников данных
                             data_sources_inp_seq = []
                             true_data_length = max(self.sequence_length - i_p, 0) # количество данных которые нужно взять из источников данных
-                            predict_data_length = sequence_length - true_data_length # количество данных которые нужно взять из спрогнозированных данных
+                            predict_data_length = self.sequence_length - true_data_length # количество данных которые нужно взять из спрогнозированных данных
                             for i_ds in range(len(self.data_sources)):
                                 data_source_inp_seq = []
                                 for i_seq in range(i_c - self.sequence_length + i_p + 1, i_c - self.sequence_length + i_p + 1 + true_data_length):
                                     data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
-                                for i_seq in range(i_p - predict_data_length + 1, i_p + 1):
-                                    data_source_inp_seq.append(copy.deepcopy(predict_data_sources[i_ds][i_f][i_seq]))
+                                for i_seq in range(i_p - predict_data_length, i_p):
+                                    data_source_inp_seq.append(copy.deepcopy(predict_data_sources[i_ds][i_seq]))
                                 data_sources_inp_seq.append(data_source_inp_seq)
 
                             x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq)
@@ -304,36 +364,18 @@ class DataManager:
                             pred = model.predict(inp, verbose=0)
                             pred_list = pred[0].tolist()
 
-                            # разбираем выходной вектор на источники данных
-                            output_data_sources = self.norm_output_vector_to_data_sources(pred_list)
-                            denormalized_output_data_sources = self.denormalize_data_sources(data_sources_normalizers_settings, output_data_sources=output_data_sources)
+                            data_sources_inp_seq_denorm, data_sources_out_denorm = self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings, output_vector=pred_list)
+                            # определяем дату спрогнозированной свечки
+                            if len(predict_data_sources[0]) > 0:
+                                next_date = copy.deepcopy(predict_data_sources[0][-1][0]) + self.data_interval
+                            else:
+                                next_date = copy.deepcopy(self.data_sources[i_ds][i_f][i_c][0]) + self.data_interval
+                            # добавляем выходное значение для каждого источника данных
+                            for i_ds_pr in range(len(self.data_sources)):
+                                data_sources_out_denorm[i_ds_pr].insert(0, next_date)
+                                predict_data_sources[i_ds_pr].append(data_sources_out_denorm[i_ds_pr])
 
 
-
-                        predict_sequence = []
-                        for k in range(predict_length):
-                            input_sequence = []
-                            s_index = k
-                            e_index = s_index + sequence_length
-                            for u in range(s_index, min(e_index, sequence_length)):
-                                input_list = []
-                                for m in range(len(normalized_candle_files)):
-                                    input_list += normalized_candle_files[m][candle_index + u - sequence_length][1:]
-                                input_sequence.append(input_list)
-                            for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
-                                input_list = []
-                                for m in range(len(normalized_candle_files)):
-                                    input_list += list(predict_sequence[u][0][m * 5:(m + 1) * 5])
-                                input_sequence.append(input_list)
-                            x = np.array(input_sequence)
-                            inp = x.reshape(1, sequence_length, len(input_sequence[0]))
-                            pred = model.predict(inp, verbose=0)
-                            predict_sequence.append(pred)
-                            # print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
-                        if is_learn:
-                            learn_predict[i] = predict_sequence
-                        else:
-                            test_predict[i] = predict_sequence
 
         #---------------------------------------------------------------------------------------------
         #global normalized_candle_files
