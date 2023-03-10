@@ -7,12 +7,15 @@ import pandas as pd
 import copy
 
 class DataSourceMeta:
-    def __init__(self, files, date_index, data_indexes, normalizers, visualize):
+    def __init__(self, files, date_index, data_indexes, normalizers, visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
         self.files = files # список с файлами
         self.date_index = date_index # индекс даты
         self.data_indexes = data_indexes # индексы данных, которые нужно считать из файла
         self.normalizers = normalizers # список с нормализаторами для источника данных
-        self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "volume", "line". Для "candle" может быть передано или 4 или 2 индекса свечки, для "volume" и "line" может быть передан только один индекс данных. Пример: [("candle", [1,2,3,4]), ("volume", [5])]
+        self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "line". Для "candle" может быть передано или 4 или 2 индекса данных, для "line" может быть передан только один индекс данных. Пример графиков цены и объема: [("candle", [1,2,3,4]), ("line", [5])]
+        self.visualize_ratio = visualize_ratio # список со значениями размера панелей visualize
+        self.visualize_name = visualize_name  # список с названиями панелей visualize
+        self.visualize_data_source_panel = visualize_data_source_panel  # номер панели visualize в имени которой будет название источника данных (первого файла)
 
 class DataManager:
     @classmethod
@@ -312,9 +315,11 @@ class DataManager:
         return input_data_sources_normalizers
 
     def visualize_predict_to_file(self, data_sources_true, data_sources_predict, file_name, header):
-        data_sources_min_max = []
-        for i_ds in range(len(data_sources_true)):
-
+        add_plot = []
+        for i_ds in range(len(data_sources_true) - 1, -1, -1):
+            for i_p in range(len(self.data_sources_meta[i_ds].visualize)):
+                type_chart, data_indexes = self.data_sources_meta[i_ds].visualize[i_p]
+                if type_chart == "candle":
 
 
 

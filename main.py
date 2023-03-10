@@ -32,7 +32,7 @@ data_sources_meta = [
         normalizers=[
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
-        ], visualize=[("candle", [1,2,3,4]), ("volume", [5])]),
+        ], visualize=[("candle", [1,2,3,4]), ("line", [5])], visualize_ratio=[3,1], visualize_name=["price", "volume"]),
     features.DataSourceMeta(files=[
             "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_0_30.csv",
             "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_20_50.csv"
@@ -40,7 +40,7 @@ data_sources_meta = [
         normalizers=[
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
-        ], visualize=[("candle", [1,2,3,4]), ("volume", [5])]))
+        ], visualize=[("candle", [1,2,3,4]), ("line", [5])], visualize_ratio=[3,1], visualize_name=["price", "volume"])
 ]
 
 data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
