@@ -314,89 +314,125 @@ class DataManager:
             input_data_sources_normalizers.append(data_source_normalizers)
         return input_data_sources_normalizers
 
-    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, file_name, header):
+    def data_to_mplfinance_candle(self, data):  # data format: [date (1675087200000, милисекунды), open, high, low, close]
+        reformatted_data = dict()
+        reformatted_data['Date'] = []
+        reformatted_data['Open'] = []
+        reformatted_data['High'] = []
+        reformatted_data['Low'] = []
+        reformatted_data['Close'] = []
+        # reformatted_data['Volume'] = []
+        for item in data:
+            reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+            reformatted_data['Open'].append(item[1])
+            reformatted_data['High'].append(item[2])
+            reformatted_data['Low'].append(item[3])
+            reformatted_data['Close'].append(item[4])
+            # reformatted_data['Volume'].append(item[5])
+        return reformatted_data
+
+    def data_to_mplfinance_line(self, data):  # data format: [date (1675087200000, милисекунды), value]
+        reformatted_data = dict()
+        reformatted_data['Date'] = []
+        reformatted_data['Close'] = []
+        for item in data:
+            reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+            reformatted_data['Close'].append(item[1])
+        return reformatted_data
+
+    # data_sources_true и data_sources_predict должны иметь одинаковую длину данных
+    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, save_file_path):
         add_plot = []
         for i_ds in range(len(data_sources_true) - 1, -1, -1):
-            for i_p in range(len(self.data_sources_meta[i_ds].visualize)):
+            for i_p in range(len(self.data_sources_meta[i_ds].visualize) - 1, -1, -1):
                 type_chart, data_indexes = self.data_sources_meta[i_ds].visualize[i_p]
                 if type_chart == "candle":
+                    if len(data_indexes) != 2 and len(data_indexes) != 4:
+                        raise ValueError("Количество индексов в типе визуализации candle должно быть 4 или 2.")
+                    # формируем список с данными формата: [date, open, high, low, close]
+                    data_true = [[data_source_true[dat_ind] for dat_ind in data_indexes] for data_source_true in data_sources_true]
+                    data_predict = [[data_source_predict[dat_ind] for dat_ind in data_indexes] for data_source_predict in data_sources_predict]
+                    if len(data_indexes) == 2:
+                        for i_d in range(len(data_true)):
+                            data_true[i_d].append(data_true[i_d][1])
+                            data_true[i_d].insert(0, data_true[i_d][0])
 
+                            data_predict[i_d].append(data_predict[i_d][1])
+                            data_predict[i_d].insert(0, data_predict[i_d][0])
 
+                    # добавляем даты
+                    for i_d in range(len(data_true)):
+                        data_true[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+                        data_predict[i_d].insert(0, data_sources_true[i_ds][i_d][0])
 
-        normalize_open = []
-        data_true = []
-        # print(f"len(candle_files)={len(candle_files)}")
-        for i in range(len(candle_files)):
-            data_true.append(
-                copy.deepcopy(candle_files[i][candle_index - sequence_length:candle_index + predict_length]))
-            # print(f"candle_index - sequence_length={candle_index - sequence_length}, candle_index + predict_length={candle_index + predict_length}")
-            normalize_open.append(normalized_candle_files[i][candle_index - sequence_length][1])
-        data_predict = []
-        for i in range(len(candle_files)):
-            data_predict.append(
-                copy.deepcopy(candle_files[i][candle_index - sequence_length:candle_index + predict_length]))
-        predict_sequence_files = []
-        for i in range(len(candle_files)):
-            predict_sequence_file = []
-            for k in range(len(predict_sequence)):
-                predict_sequence_file.append(predict_sequence[k][i * 5:(i + 1) * 5][0])
-            predict_sequence_files.append(predict_sequence_file)
-        # print(f"predict_sequence_files={predict_sequence_files}")
-        for i in range(len(candle_files)):
-            for k in range(sequence_length):
-                # print(f"data_true={data_true}")
-                # print(f"data_predict={data_predict}")
-                # print(f"data_predict[{i}]={data_predict[i]}")
-                # print(f"k={k}")
-                # print(f"data_predict[{i}][{k}]={data_predict[i][k]}")
-                # input()
-                data_predict[i][k][1] = copy.deepcopy(normalize_open[i])
-                data_predict[i][k][2] = copy.deepcopy(normalize_open[i])
-                data_predict[i][k][3] = copy.deepcopy(normalize_open[i])
-                data_predict[i][k][4] = copy.deepcopy(normalize_open[i])
-                data_predict[i][k][5] = copy.deepcopy(normalize_open[i])
-            # print(f"sequence_length={sequence_length}, len(data_predict[i])={len(data_predict[i])}")
-            for k in range(sequence_length, len(data_predict[i])):
-                # print(f"i={i}, k={k}")
-                # print(f"data_predict[i][k][1]={data_predict[i][k][1]}")
-                # print(f"predict_sequence_files[i][k - sequence_length][0]={predict_sequence_files[i][k - sequence_length][0]}")
-                data_predict[i][k][1] = predict_sequence_files[i][k - sequence_length][0]
-                data_predict[i][k][2] = predict_sequence_files[i][k - sequence_length][1]
-                data_predict[i][k][3] = predict_sequence_files[i][k - sequence_length][2]
-                data_predict[i][k][4] = predict_sequence_files[i][k - sequence_length][3]
-                data_predict[i][k][5] = predict_sequence_files[i][k - sequence_length][4]
-        # print(f"data_predict before unnormalize={data_predict}")
-        data_predict = un_normalize_min_max_scaler(data_predict)
-        # print(f"data_predict after unnormalize={data_predict}")
+                    high_canal = [item[2] for item in data_true]
+                    low_canal = [item[3] for item in data_true]
 
-        for i in range(len(candle_files)):
-            high_canal = [data_true[i][k][2] for k in range(len(data_true[i]))]
-            low_canal = [data_true[i][k][3] for k in range(len(data_true[i]))]
-            # print(f"data_true   ={data_true}")
-            # print(f"data_predict={data_predict}")
-            # input()
-            ymin = min(min([data_true[i][k][3] for k in range(len(data_true[i]))]),
-                       min([min(data_predict[i][k][1:5]) for k in range(len(data_predict[i]))]))
-            ymax = max(max([data_true[i][k][2] for k in range(len(data_true[i]))]),
-                       max([max(data_predict[i][k][1:5]) for k in range(len(data_predict[i]))]))
-            yrange = ymax - ymin
-            ymin -= yrange * 0.02
-            ymax += yrange * 0.02
+                    mplfinance_data_true = self.data_to_mplfinance_candle(data_true)
+                    mplfinance_data_predict = self.data_to_mplfinance_candle(data_predict)
 
-            data_true_reformatted = convert_candles_to_mplfinance_data(data_true[i])
-            data_predict_reformatted = convert_candles_to_mplfinance_data(data_predict[i])
-            pdata_true = pd.DataFrame.from_dict(data_true_reformatted)
-            pdata_true.set_index('Date', inplace=True)
-            pdata_predict = pd.DataFrame.from_dict(data_predict_reformatted)
-            pdata_predict.set_index('Date', inplace=True)
-            image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
-            add_plot = [
-                mpf.make_addplot(high_canal, type='line', linewidths=1, alpha=1, color="black", ylim=(ymin, ymax)),
-                mpf.make_addplot(low_canal, type='line', linewidths=1, alpha=1, color="black", ylim=(ymin, ymax)),
-                mpf.make_addplot(pdata_predict, type='candle', ylim=(ymin, ymax))]
-            mpf.plot(pdata_true, type='candle', style='yahoo', addplot=add_plot, ylim=(ymin, ymax), figsize=(16, 9),
-                     ylabel='price', datetime_format="%Y-%b-%d", tight_layout=True, savefig=image_path)
-            print(f"save image {image_path}")
+                    p_data_true = pd.DataFrame.from_dict(mplfinance_data_true)
+                    p_data_true.set_index('Date', inplace=True)
+                    p_data_predict = pd.DataFrame.from_dict(mplfinance_data_predict)
+                    p_data_predict.set_index('Date', inplace=True)
+
+                    ymin = min(min([min(item[1:5]) for item in data_true]), min([min(item[1:5]) for item in data_predict]))
+                    ymax = max(max([max(item[1:5]) for item in data_true]), max([max(item[1:5]) for item in data_predict]))
+
+                    y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
+                    panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
+
+                    if i_ds == 0 and i_p == 0:
+                        add_plot.append(mpf.make_addplot(high_canal, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
+                        add_plot.append(mpf.make_addplot(low_canal, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='candle', ylim=(ymin,ymax)))
+                    else:
+                        add_plot.append(mpf.make_addplot(high_canal, type='line', panel=panel_num, ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(low_canal, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_true, type='candle', panel=panel_num, ylim=(ymin, ymax)))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='candle', panel=panel_num, ylim=(ymin, ymax)))
+
+                elif type_chart == "line":
+                    if len(data_indexes) != 1:
+                        raise ValueError("Количество индексов в типе визуализации line должно быть 1.")
+                    data_true = [[data_source_true[dat_ind] for dat_ind in data_indexes] for data_source_true in data_sources_true]
+                    data_predict = [[data_source_predict[dat_ind] for dat_ind in data_indexes] for data_source_predict in data_sources_predict]
+
+                    # добавляем даты
+                    for i_d in range(len(data_true)):
+                        data_true[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+                        data_predict[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+
+                    mplfinance_data_true = self.data_to_mplfinance_line(data_true)
+                    mplfinance_data_predict = self.data_to_mplfinance_line(data_predict)
+
+                    p_data_true = pd.DataFrame.from_dict(mplfinance_data_true)
+                    p_data_true.set_index('Date', inplace=True)
+                    p_data_predict = pd.DataFrame.from_dict(mplfinance_data_predict)
+                    p_data_predict.set_index('Date', inplace=True)
+
+                    ymin = min(min([min(item[1]) for item in data_true]), min([min(item[1]) for item in data_predict]))
+                    ymax = max(max([max(item[1]) for item in data_true]), max([max(item[1]) for item in data_predict]))
+
+                    y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
+                    panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
+
+                    if i_ds == 0 and i_p == 0:
+                        add_plot.append(mpf.make_addplot(p_data_true, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="springgreen"))
+                    else:
+                        add_plot.append(mpf.make_addplot(p_data_true, type='line', panel=panel_num, ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="springgreen"))
+
+        myrcparams = {'axes.labelsize': 'small'}
+        my_style = mpf.make_mpf_style(base_mpf_style='yahoo', facecolor='white', y_on_right=False, rc=myrcparams)
+        panel_ratios = ()
+        for i_ds in range(len(data_sources_true)):
+            for i_p in range(len(self.data_sources_meta[i_ds].visualize_ratio)):
+                panel_ratios += (self.data_sources_meta[i_ds].visualize_ratio[i_p],)
+        mpf.plot(p_data_true, type='line', style=my_style, ylabel=y_label, ylim=(ymin,ymax), addplot=add_plot, panel_ratios=panel_ratios, figsize=(18,9), datetime_format="%Y-%b-%d", tight_layout=True, savefig=save_file_path)
+        #, fill_between = [dict1, dict2, dict3]  image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
+        print(f"save image {save_file_path}")
 
     def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single):
         self.model = model
@@ -473,7 +509,7 @@ class DataManager:
                                 probability = self.part_test_predict_visualize
                             rand = random.random()
                             if rand <= probability:
-                                pass
+                                self.visualize_predict_to_file(data_sources_true, data_sources_predict, save_file_path)
 
 
         #---------------------------------------------------------------------------------------------
