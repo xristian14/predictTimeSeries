@@ -12,7 +12,7 @@ from tensorflow.keras.optimizers import Adam
 data_split_sequence_length = 2 # данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
 validation_split = 0.05 # размер данных для валидации относительно всех данных
 test_split = 0.25 # размер тестовых данных относительно всех данных
-sequence_length = 7 # длина последовательных данных для которых делается прогноз следующего значения
+sequence_length = 10 # длина последовательных данных для которых делается прогноз следующего значения
 predict_length = 5 # количество шагов на которое будут спрогнозированы данные
 part_learn_predict = 0.2 # часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_test_predict = 0.5 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
@@ -41,7 +41,7 @@ data_sources_meta = [
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], visualize_ratio=[3,1], visualize_name=["price", "volume"])
-]
+] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных жанных, которые нумеруются от 1 до колчества индексов в data_indexes
 
 data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
 
@@ -68,7 +68,7 @@ print(f"длина обучающей выборки: {len(data_manager.x_learn)
 print(f"длина выборки валидации: {len(data_manager.x_valid)}")
 print(f"длина тестовой выборки: {len(data_manager.x_test)}")
 
-data_manager.predict_data(model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single)
+data_manager.predict_data(model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut)
 
 
 raise EOFError

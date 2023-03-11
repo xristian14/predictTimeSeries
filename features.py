@@ -321,14 +321,19 @@ class DataManager:
         reformatted_data['High'] = []
         reformatted_data['Low'] = []
         reformatted_data['Close'] = []
-        # reformatted_data['Volume'] = []
         for item in data:
-            reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
-            reformatted_data['Open'].append(item[1])
-            reformatted_data['High'].append(item[2])
-            reformatted_data['Low'].append(item[3])
-            reformatted_data['Close'].append(item[4])
-            # reformatted_data['Volume'].append(item[5])
+            if len(item) == 1:
+                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Open'].append(None)
+                reformatted_data['High'].append(None)
+                reformatted_data['Low'].append(None)
+                reformatted_data['Close'].append(None)
+            else:
+                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Open'].append(item[1])
+                reformatted_data['High'].append(item[2])
+                reformatted_data['Low'].append(item[3])
+                reformatted_data['Close'].append(item[4])
         return reformatted_data
 
     def data_to_mplfinance_line(self, data):  # data format: [date (1675087200000, милисекунды), value]
@@ -336,11 +341,15 @@ class DataManager:
         reformatted_data['Date'] = []
         reformatted_data['Close'] = []
         for item in data:
-            reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
-            reformatted_data['Close'].append(item[1])
+            if len(item) == 1:
+                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Close'].append(None)
+            else:
+                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Close'].append(item[1])
         return reformatted_data
 
-    # data_sources_true и data_sources_predict должны иметь одинаковую длину данных
+    # data_sources_true[0] и data_sources_predict[0] должны иметь одинаковое количество дат
     def visualize_predict_to_file(self, data_sources_true, data_sources_predict, save_file_path):
         add_plot = []
         for i_ds in range(len(data_sources_true) - 1, -1, -1):
@@ -350,20 +359,26 @@ class DataManager:
                     if len(data_indexes) != 2 and len(data_indexes) != 4:
                         raise ValueError("Количество индексов в типе визуализации candle должно быть 4 или 2.")
                     # формируем список с данными формата: [date, open, high, low, close]
-                    data_true = [[data_source_true[dat_ind] for dat_ind in data_indexes] for data_source_true in data_sources_true]
-                    data_predict = [[data_source_predict[dat_ind] for dat_ind in data_indexes] for data_source_predict in data_sources_predict]
+                    data_true = [[data_sources_true[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(len(data_sources_true[i_ds]))]
+                    data_predict = []
+                    i_candle = 0
+                    while len(data_sources_predict[i_ds][i_candle]) == 1:
+                        data_predict.append([])
+                        i_candle += 1
+                    data_predict.extend([[data_sources_predict[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(i_candle, len(data_sources_predict[i_ds]))])
                     if len(data_indexes) == 2:
                         for i_d in range(len(data_true)):
                             data_true[i_d].append(data_true[i_d][1])
                             data_true[i_d].insert(0, data_true[i_d][0])
 
-                            data_predict[i_d].append(data_predict[i_d][1])
-                            data_predict[i_d].insert(0, data_predict[i_d][0])
+                            if i_d >= i_candle:
+                                data_predict[i_d].append(data_predict[i_d][1])
+                                data_predict[i_d].insert(0, data_predict[i_d][0])
 
                     # добавляем даты
                     for i_d in range(len(data_true)):
                         data_true[i_d].insert(0, data_sources_true[i_ds][i_d][0])
-                        data_predict[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+                        data_predict[i_d].insert(0, data_sources_predict[i_ds][i_d][0])
 
                     high_canal = [item[2] for item in data_true]
                     low_canal = [item[3] for item in data_true]
@@ -376,8 +391,8 @@ class DataManager:
                     p_data_predict = pd.DataFrame.from_dict(mplfinance_data_predict)
                     p_data_predict.set_index('Date', inplace=True)
 
-                    ymin = min(min([min(item[1:5]) for item in data_true]), min([min(item[1:5]) for item in data_predict]))
-                    ymax = max(max([max(item[1:5]) for item in data_true]), max([max(item[1:5]) for item in data_predict]))
+                    ymin = min(min([min(item[1:5]) for item in data_true]), min([min(item[1:5]) for item in data_predict[i_candle:]]))
+                    ymax = max(max([max(item[1:5]) for item in data_true]), max([max(item[1:5]) for item in data_predict[i_candle:]]))
 
                     y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
                     panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
@@ -395,13 +410,18 @@ class DataManager:
                 elif type_chart == "line":
                     if len(data_indexes) != 1:
                         raise ValueError("Количество индексов в типе визуализации line должно быть 1.")
-                    data_true = [[data_source_true[dat_ind] for dat_ind in data_indexes] for data_source_true in data_sources_true]
-                    data_predict = [[data_source_predict[dat_ind] for dat_ind in data_indexes] for data_source_predict in data_sources_predict]
+                    data_true = [[data_sources_true[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(len(data_sources_true[i_ds]))]
+                    data_predict = []
+                    i_candle = 0
+                    while len(data_sources_predict[i_ds][i_candle]) == 1:
+                        data_predict.append([])
+                        i_candle += 1
+                    data_predict.extend([[data_sources_predict[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(i_candle, len(data_sources_predict[i_ds]))])
 
                     # добавляем даты
                     for i_d in range(len(data_true)):
                         data_true[i_d].insert(0, data_sources_true[i_ds][i_d][0])
-                        data_predict[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+                        data_predict[i_d].insert(0, data_sources_predict[i_ds][i_d][0])
 
                     mplfinance_data_true = self.data_to_mplfinance_line(data_true)
                     mplfinance_data_predict = self.data_to_mplfinance_line(data_predict)
@@ -411,8 +431,8 @@ class DataManager:
                     p_data_predict = pd.DataFrame.from_dict(mplfinance_data_predict)
                     p_data_predict.set_index('Date', inplace=True)
 
-                    ymin = min(min([min(item[1]) for item in data_true]), min([min(item[1]) for item in data_predict]))
-                    ymax = max(max([max(item[1]) for item in data_true]), max([max(item[1]) for item in data_predict]))
+                    ymin = min(min([item[1] for item in data_true]), min([item[1] for item in data_predict[i_candle:]]))
+                    ymax = max(max([item[1] for item in data_true]), max([item[1] for item in data_predict[i_candle:]]))
 
                     y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
                     panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
@@ -430,11 +450,13 @@ class DataManager:
         for i_ds in range(len(data_sources_true)):
             for i_p in range(len(self.data_sources_meta[i_ds].visualize_ratio)):
                 panel_ratios += (self.data_sources_meta[i_ds].visualize_ratio[i_p],)
-        mpf.plot(p_data_true, type='line', style=my_style, ylabel=y_label, ylim=(ymin,ymax), addplot=add_plot, panel_ratios=panel_ratios, figsize=(18,9), datetime_format="%Y-%b-%d", tight_layout=True, savefig=save_file_path)
+        mpf.plot(p_data_true, type='candle', style=my_style, ylabel=y_label, ylim=(ymin,ymax), addplot=add_plot, panel_ratios=panel_ratios, figsize=(18,9), datetime_format="%Y-%b-%d", tight_layout=True, savefig=save_file_path)
         #, fill_between = [dict1, dict2, dict3]  image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
         print(f"save image {save_file_path}")
 
-    def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single):
+    # выполняет прогнозирование, и записывает спрогнозированные данные в self.data_sources_predict. Данные, находящиеся в self.data_sources_predict[i_ds][i_f][10], соответствуют реальным данным, идущим за 10 индексом, то есть дата первого спрогнозированного значения в self.data_sources_predict[i_ds][i_f][10] соответствует дате self.data_sources[i_ds][i_f][11]
+    # выполняет визуализацию спрогнозированных последовательностей. Для свечки self.data_sources[i_ds][i_f][11] будет взята спрогнозированная последовательность self.data_sources_predict[i_ds][i_f][10], т.к. разделение на учебные и тестовые прогнозы означает что первое спрогнозированное значение должно быть либо учебным либо тестовым
+    def predict_data(self, model, predict_length, is_save_predict_data, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut):
         self.model = model
         self.predict_length = predict_length
         self.is_save_predict_data = is_save_predict_data
@@ -444,6 +466,7 @@ class DataManager:
         self.part_test_predict_visualize = part_test_predict_visualize
         self.is_visualize_prediction_union = is_visualize_prediction_union
         self.is_visualize_prediction_single = is_visualize_prediction_single
+        self.visualize_prediction_cut = visualize_prediction_cut
 
         self.data_sources_predict = [[[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))] for i_ds in range(len(self.data_sources))]
 
@@ -500,69 +523,38 @@ class DataManager:
 
         # визуализируем прогнозирование
         if self.is_visualize_prediction_union or self.is_visualize_prediction_single:
+            approved_sequence_length = 1 if self.predict_length >= self.visualize_prediction_cut else min(self.sequence_length, visualize_prediction_cut - self.predict_length) #длина входной последовательности которую будем визуализировать, это нужно чтобы при большой длине входных значений была возможность не показывать часть или всю входную последовательность и сосредоточить внимание на сравнении спрогнозированных значений с истинными.
             for i_f in range(len(self.data_sources_predict[0])):
-                for i_c in range(len(self.data_sources_predict[0][i_f])):
+                for i_c in range(len(self.data_sources_predict[0][i_f]) - 1): # -1 т.к. мы последний элемент не проверяем, т.к. следующий за ним индекс следующей свечки (для определения типа данных) не существует
                     if self.data_sources_predict[0][i_f][i_c] != None:
-                        if self.data_sources_data_type[i_f][i_c] != -1 and self.data_sources_data_type[i_f][i_c] != 1 and len(self.data_sources_data_type[i_f][i_c]) - i_c > self.predict_length:
+                        i_c_dt = i_c + 1 # index candle data type
+                        if self.data_sources_data_type[i_f][i_c_dt] != -1 and self.data_sources_data_type[i_f][i_c_dt] != 1 and len(self.data_sources_data_type[i_f]) - i_c_dt >= self.predict_length:
                             probability = self.part_learn_predict_visualize
-                            if self.data_sources_data_type[i_f][i_c] == 2:
+                            if self.data_sources_data_type[i_f][i_c_dt] == 2:
                                 probability = self.part_test_predict_visualize
                             rand = random.random()
                             if rand <= probability:
-                                self.visualize_predict_to_file(data_sources_true, data_sources_predict, save_file_path)
+                                # создаем данные для всех источников данных
+                                data_sources_true = []
+                                data_sources_predict = []
+                                for i_ds in range(len(self.data_sources)):
+                                    data_source_true = [copy.deepcopy(self.data_sources[i_ds][i_f][i_candle]) for i_candle in range(i_c_dt - approved_sequence_length, i_c_dt + self.predict_length)]
+                                    # в спрогнозированных данных, на месте истинных данных присутствуют только дата без данных для этой даты, такая дата не будет иметь данных на графике
+                                    data_source_predict = [copy.deepcopy(self.data_sources[i_ds][i_f][i_candle][0:1]) for i_candle in range(i_c_dt - approved_sequence_length, i_c_dt)]
+                                    #добавляем спрогнозированные данные
+                                    data_source_predict.extend(self.data_sources_predict[i_ds][i_f][i_c])
+                                    data_sources_true.append(data_source_true)
+                                    data_sources_predict.append(data_source_predict)
 
+                                if self.is_visualize_prediction_union:
+                                    save_file_path = f"{self.folder_images_learn_predict if self.data_sources_data_type[i_f][i_c_dt] == 2 else self.folder_images_test_predict}/union_{str(i_f).rjust(3, '0')}_{str(i_c_dt).rjust(7, '0')}"
+                                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, save_file_path)
 
-        #---------------------------------------------------------------------------------------------
-        #global normalized_candle_files
-        # прогнозирование для обучающих данных
-        learn_images_folder_path = f"{save_folder_path}/images/learn"
-        test_images_folder_path = f"{save_folder_path}/images/test"
-        os.makedirs(learn_images_folder_path)
-        os.makedirs(test_images_folder_path)
-        learn_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
-        test_predict = dict()  # словарь: ключ - индекс свечки начала последовательности для которой сделан прогноз, значение - список с спрогнозированными на predict_length шагов вперед значениями
-        for i in range(len(X_learn_indexes) + len(X_test_indexes)):
-            if i < len(X_learn_indexes):
-                is_learn = True
-                candle_index = X_learn_indexes[i]
-            else:
-                is_learn = False
-                candle_index = X_test_indexes[i - len(X_learn_indexes)]
-            if candle_index <= len(normalized_candle_files[0]) - predict_length:  # если от последней свечки есть отступ в predict_length
-                rand = random.random()
-                if (is_learn and rand <= part_learn_predict) or (not is_learn and rand <= part_test_predict):
-                    predict_sequence = []
-                    for k in range(predict_length):
-                        input_sequence = []
-                        s_index = k
-                        e_index = s_index + sequence_length
-                        for u in range(s_index, min(e_index, sequence_length)):
-                            input_list = []
-                            for m in range(len(normalized_candle_files)):
-                                input_list += normalized_candle_files[m][candle_index + u - sequence_length][1:]
-                            input_sequence.append(input_list)
-                        for u in range(max(s_index - sequence_length, 0), e_index - sequence_length):
-                            input_list = []
-                            for m in range(len(normalized_candle_files)):
-                                input_list += list(predict_sequence[u][0][m * 5:(m + 1) * 5])
-                            input_sequence.append(input_list)
-                        x = np.array(input_sequence)
-                        inp = x.reshape(1, sequence_length, len(input_sequence[0]))
-                        pred = model.predict(inp, verbose=0)
-                        predict_sequence.append(pred)
-                        # print(f"k={k}, s_index={s_index}, e_index={e_index}, input_sequence={input_sequence}")
-                    if is_learn:
-                        learn_predict[i] = predict_sequence
-                    else:
-                        test_predict[i] = predict_sequence
-                    # print(f"candle_files[{0}][{i}:{i + sequence_length + predict_length}]={candle_files[0][i:i + sequence_length + predict_length]}")
-                    # print(f"normalized_candle_files[{0}][{i}:{i + sequence_length + predict_length}]={normalized_candle_files[0][i:i + sequence_length + predict_length]}")
-                    # print(f"predict_sequence={predict_sequence}")
-                    # input()
-                    # визуализируем и сохраняем в файл
-                    if is_visualize_prediction:
-                        folder_path = learn_images_folder_path if is_learn else test_images_folder_path
-                        visualize_predict_to_file(candle_index, sequence_length, predict_length, predict_sequence, folder_path)
+                                if self.is_visualize_prediction_single:
+                                    for i_ds in range(len(self.data_sources)):
+                                        save_file_path = f"{self.folder_images_learn_predict if self.data_sources_data_type[i_f][i_c_dt] == 2 else self.folder_images_test_predict}/single_{self.data_sources_file_names[i_ds][0].split('.')[0]}_{str(i_f).rjust(3, '0')}_{str(i_c_dt).rjust(7, '0')}"
+                                        self.visualize_predict_to_file(data_sources_true[i_ds:i_ds + 1], data_sources_predict[i_ds:i_ds + 1], save_file_path)
+
 
 # --------------------------------------------------------------------------------
 
