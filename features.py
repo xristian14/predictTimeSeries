@@ -339,19 +339,45 @@ class DataManager:
     def data_to_mplfinance_line(self, data):  # data format: [date (1675087200000, милисекунды), value]
         reformatted_data = dict()
         reformatted_data['Date'] = []
+        reformatted_data['Open'] = []
+        reformatted_data['High'] = []
+        reformatted_data['Low'] = []
         reformatted_data['Close'] = []
         for item in data:
             if len(item) == 1:
                 reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Open'].append(None)
+                reformatted_data['High'].append(None)
+                reformatted_data['Low'].append(None)
                 reformatted_data['Close'].append(None)
             else:
                 reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Open'].append(0)
+                reformatted_data['High'].append(0)
+                reformatted_data['Low'].append(0)
                 reformatted_data['Close'].append(item[1])
         return reformatted_data
 
     # data_sources_true[0] и data_sources_predict[0] должны иметь одинаковое количество дат
-    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, save_file_path):
+    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, data_type, save_file_path):
         add_plot = []
+        where_values_none = []
+        where_values_learn = []
+        where_values_validate = []
+        where_values_test = []
+        where_values_end_inp_seq = []
+        y_over_rate = 0.02 # отступ от верхнего и нижнего края
+        data_type_rate = 0.008 # толщина линии типа данных
+        for i in range(len(data_type)):
+            where_values_none.append(True if data_type[i] == -1 else False)
+            where_values_learn.append(True if data_type[i] == 0 else False)
+            where_values_validate.append(True if data_type[i] == 1 else False)
+            where_values_test.append(True if data_type[i] == 2 else False)
+            where_values_end_inp_seq.append(False)
+        for i in range(len(data_sources_predict[0])):
+            if len(data_sources_predict[0][i]) > 1:
+                where_values_end_inp_seq[i - 1] = True
+                break
         for i_ds in range(len(data_sources_true) - 1, -1, -1):
             for i_p in range(len(self.data_sources_meta[i_ds].visualize) - 1, -1, -1):
                 type_chart, data_indexes = self.data_sources_meta[i_ds].visualize[i_p]
@@ -393,16 +419,26 @@ class DataManager:
 
                     ymin = min(min([min(item[1:5]) for item in data_true]), min([min(item[1:5]) for item in data_predict[i_candle:]]))
                     ymax = max(max([max(item[1:5]) for item in data_true]), max([max(item[1:5]) for item in data_predict[i_candle:]]))
+                    data_type_width = (ymax - ymin) * data_type_rate
+                    y_over = (ymax - ymin) * y_over_rate
+                    ymin -= y_over + data_type_width
+                    ymax += y_over
 
                     y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
                     panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
+
+                    dict_none = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_none, alpha=0.55, color='red')
+                    dict_learn = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_learn, alpha=0.6, color='darkorange')
+                    dict_validate = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_validate, alpha=0.5, color='blueviolet')
+                    dict_test = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_test, alpha=0.9, color='deepskyblue')
+                    dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
 
                     if i_ds == 0 and i_p == 0:
                         add_plot.append(mpf.make_addplot(high_canal, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
                         add_plot.append(mpf.make_addplot(low_canal, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
                         add_plot.append(mpf.make_addplot(p_data_predict, type='candle', ylim=(ymin,ymax)))
                     else:
-                        add_plot.append(mpf.make_addplot(high_canal, type='line', panel=panel_num, ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(high_canal, type='line', panel=panel_num, fill_between=[dict_none,dict_learn,dict_validate,dict_test,dict_end_inp_seq], ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
                         add_plot.append(mpf.make_addplot(low_canal, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
                         add_plot.append(mpf.make_addplot(p_data_true, type='candle', panel=panel_num, ylim=(ymin, ymax)))
                         add_plot.append(mpf.make_addplot(p_data_predict, type='candle', panel=panel_num, ylim=(ymin, ymax)))
@@ -433,15 +469,25 @@ class DataManager:
 
                     ymin = min(min([item[1] for item in data_true]), min([item[1] for item in data_predict[i_candle:]]))
                     ymax = max(max([item[1] for item in data_true]), max([item[1] for item in data_predict[i_candle:]]))
+                    data_type_width = (ymax - ymin) * data_type_rate
+                    y_over = (ymax - ymin) * y_over_rate
+                    ymin -= y_over + data_type_width
+                    ymax += y_over
 
                     y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
                     panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
+
+                    dict_none = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_none, alpha=0.55, color='red')
+                    dict_learn = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_learn, alpha=0.6, color='darkorange')
+                    dict_validate = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_validate, alpha=0.5, color='blueviolet')
+                    dict_test = dict(y1=ymin, y2=ymin + data_type_width, where=where_values_test, alpha=0.9, color='deepskyblue')
+                    dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
 
                     if i_ds == 0 and i_p == 0:
                         add_plot.append(mpf.make_addplot(p_data_true, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
                         add_plot.append(mpf.make_addplot(p_data_predict, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="springgreen"))
                     else:
-                        add_plot.append(mpf.make_addplot(p_data_true, type='line', panel=panel_num, ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_true, type='line', panel=panel_num, fill_between=[dict_none,dict_learn,dict_validate,dict_test,dict_end_inp_seq], ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
                         add_plot.append(mpf.make_addplot(p_data_predict, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="springgreen"))
 
         myrcparams = {'axes.labelsize': 'small'}
@@ -450,8 +496,8 @@ class DataManager:
         for i_ds in range(len(data_sources_true)):
             for i_p in range(len(self.data_sources_meta[i_ds].visualize_ratio)):
                 panel_ratios += (self.data_sources_meta[i_ds].visualize_ratio[i_p],)
-        mpf.plot(p_data_true, type='candle', style=my_style, ylabel=y_label, ylim=(ymin,ymax), addplot=add_plot, panel_ratios=panel_ratios, figsize=(18,9), datetime_format="%Y-%b-%d", tight_layout=True, savefig=save_file_path)
-        #, fill_between = [dict1, dict2, dict3]  image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}"
+        mpf.plot(p_data_true, type='candle' if type_chart == "candle" else 'line', style=my_style, ylabel=y_label, ylim=(ymin,ymax), addplot=add_plot, fill_between=[dict_none,dict_learn,dict_validate,dict_test,dict_end_inp_seq], panel_ratios=panel_ratios, figsize=(18,9), datetime_format="%Y-%b-%d", tight_layout=True, savefig=save_file_path)
+        #, fill_between = [dict1, dict2, dict3]  image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}", columns=None if type_chart == "candle" else ['Close']
         print(f"save image {save_file_path}")
 
     # выполняет прогнозирование, и записывает спрогнозированные данные в self.data_sources_predict. Данные, находящиеся в self.data_sources_predict[i_ds][i_f][10], соответствуют реальным данным, идущим за 10 индексом, то есть дата первого спрогнозированного значения в self.data_sources_predict[i_ds][i_f][10] соответствует дате self.data_sources[i_ds][i_f][11]
@@ -546,14 +592,17 @@ class DataManager:
                                     data_sources_true.append(data_source_true)
                                     data_sources_predict.append(data_source_predict)
 
+                                data_type = [self.data_sources_data_type[i_f][i_candle] for i_candle in range(i_c_dt - approved_sequence_length, i_c_dt + self.predict_length)]
+
+
                                 if self.is_visualize_prediction_union:
-                                    save_file_path = f"{self.folder_images_learn_predict if self.data_sources_data_type[i_f][i_c_dt] == 2 else self.folder_images_test_predict}/union_{str(i_f).rjust(3, '0')}_{str(i_c_dt).rjust(7, '0')}"
-                                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, save_file_path)
+                                    save_file_path = f"{self.folder_images_learn_predict if self.data_sources_data_type[i_f][i_c_dt] == 0 else self.folder_images_test_predict}/union_{str(i_f).rjust(3, '0')}_{str(i_c_dt).rjust(7, '0')}"
+                                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, data_type, save_file_path)
 
                                 if self.is_visualize_prediction_single:
                                     for i_ds in range(len(self.data_sources)):
-                                        save_file_path = f"{self.folder_images_learn_predict if self.data_sources_data_type[i_f][i_c_dt] == 2 else self.folder_images_test_predict}/single_{self.data_sources_file_names[i_ds][0].split('.')[0]}_{str(i_f).rjust(3, '0')}_{str(i_c_dt).rjust(7, '0')}"
-                                        self.visualize_predict_to_file(data_sources_true[i_ds:i_ds + 1], data_sources_predict[i_ds:i_ds + 1], save_file_path)
+                                        save_file_path = f"{self.folder_images_learn_predict if self.data_sources_data_type[i_f][i_c_dt] == 0 else self.folder_images_test_predict}/single_{self.data_sources_file_names[i_ds][0].split('.')[0]}_{str(i_f).rjust(3, '0')}_{str(i_c_dt).rjust(7, '0')}"
+                                        self.visualize_predict_to_file(data_sources_true[i_ds:i_ds + 1], data_sources_predict[i_ds:i_ds + 1], data_type, save_file_path)
 
 
 # --------------------------------------------------------------------------------
