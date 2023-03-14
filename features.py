@@ -1,3 +1,4 @@
+import time
 import random
 import os
 import numpy as np
@@ -352,9 +353,9 @@ class DataManager:
                 reformatted_data['Close'].append(None)
             else:
                 reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
-                reformatted_data['Open'].append(0)
-                reformatted_data['High'].append(0)
-                reformatted_data['Low'].append(0)
+                reformatted_data['Open'].append(item[1])
+                reformatted_data['High'].append(item[1])
+                reformatted_data['Low'].append(item[1])
                 reformatted_data['Close'].append(item[1])
         return reformatted_data
 
@@ -535,14 +536,17 @@ class DataManager:
                             is_let_in = True
 
                     if is_let_in:
-                        pred_num += 1
-                        print(f"pred_num={pred_num}")
                         predict_data_sources = []
                         for i_ds_pr in range(len(self.data_sources)):
                             predict_data_sources.append([])
 
+                        elapsed_create_inp_seq = 0
+                        elapsed_normalize = 0
+                        elapsed_predict = 0
+
                         for i_p in range(self.predict_length):
                             # формируем входную последовательность для всех источников данных
+                            time_create_inp_seq_start = time.process_time()
                             data_sources_inp_seq = []
                             true_data_length = max(self.sequence_length - i_p, 0) # количество данных которые нужно взять из источников данных
                             predict_data_length = self.sequence_length - true_data_length # количество данных которые нужно взять из спрогнозированных данных
@@ -554,10 +558,15 @@ class DataManager:
                                     data_source_inp_seq.append(copy.deepcopy(predict_data_sources[i_ds][i_seq]))
                                 data_sources_inp_seq.append(data_source_inp_seq)
 
+                            elapsed_create_inp_seq += time.process_time() - time_create_inp_seq_start
+                            time_normalize_start = time.process_time()
                             x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq)
+                            elapsed_normalize += time.process_time() - time_normalize_start
                             x_np = np.array(x)
                             inp = x_np.reshape(1, self.sequence_length, len(x[0]))
+                            time_predict_start = time.process_time()
                             pred = model.predict(inp, verbose=0)
+                            elapsed_predict += time.process_time() - time_predict_start
                             pred_list = pred[0].tolist()
 
                             data_sources_inp_seq_denorm, data_sources_out_denorm = self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings, output_vector=pred_list)
@@ -573,6 +582,9 @@ class DataManager:
 
                         for i_ds in range(len(self.data_sources)):
                             self.data_sources_predict[i_ds][i_f][i_c] = predict_data_sources[i_ds]
+
+                        pred_num += 1
+                        print(f"pred_num={pred_num}, elapsed_create_inp_seq={elapsed_create_inp_seq}, elapsed_normalize={elapsed_normalize}, elapsed_predict={elapsed_predict}")
 
         # визуализируем прогнозирование
         if self.is_visualize_prediction_union or self.is_visualize_prediction_single:
