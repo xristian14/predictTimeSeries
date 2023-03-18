@@ -9,60 +9,60 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
 
-x_hour = [
-    [[0.5],[0.4]],
-    [[0.4],[0.5]],
-    [[0.5],[0.4]],
-    [[0.4],[0.5]],
-    [[0.5],[0.4]],
-    [[0.4],[0.5]]
-]
-y_hour = [
-    [0.1],
-    [1],
-    [0.9],
-    [0],
-    [0.9],
-    [0]
-]
-x_day = [
-    [[0.9]],
-    [[0.2]],
-    [[0.1]],
-    [[0.8]],
-    [[0.1]],
-    [[0.9]]
-]
+# x_hour = [
+#     [[0.5],[0.4],[0.5],[0.4]],
+#     [[0.4],[0.5],[0.4],[0.5]],
+#     [[0.5],[0.4],[0.5],[0.4]],
+#     [[0.4],[0.5],[0.4],[0.5]],
+#     [[0.5],[0.4],[0.5],[0.4]],
+#     [[0.4],[0.5],[0.4],[0.5]]
+# ]
+# y_hour = [
+#     [0.1],
+#     [1],
+#     [0.9],
+#     [0],
+#     [0.9],
+#     [0]
+# ]
 # x_day = [
-#     [[0]],
-#     [[0]],
-#     [[0]],
-#     [[0]],
-#     [[0]],
-#     [[0]]
+#     [[0.9],[1]],
+#     [[0.2],[0.1]],
+#     [[0.1],[0]],
+#     [[0.8],[1]],
+#     [[0.1],[0.2]],
+#     [[0.9],[0.8]]
+# ]
+# x_day = [
+#     [[0.1],[0.1]],
+#     [[0.2],[0.2]],
+#     [[1],[1]],
+#     [[0.5],[0.5]],
+#     [[0.6],[0.6]],
+#     [[1],[1]]
 # ]
 
-main_input = Input(shape=(len(x_hour[0]),len(x_hour[0][0])), name='main_input')
-lstm_out = LSTM(8)(main_input)
-day_input = Input(shape=(len(x_day[0]),len(x_day[0][0])), name='day_input')
-lstm_day_out = LSTM(8)(day_input)
-x = tf.keras.layers.concatenate([lstm_out, lstm_day_out])
-main_output = Dense(1, activation='sigmoid', name='main_output')(x)
-model = tf.keras.models.Model(inputs=[main_input, day_input], outputs=[main_output])
-model.compile(optimizer='adam', loss={'main_output': 'binary_crossentropy'})
-history = model.fit({'main_input': np.array(x_hour), 'day_input': np.array(x_day)}, {'main_output': np.array(y_hour)}, epochs=500, batch_size=1)
-plt.figure(figsize=(6,5))
-plt.plot(history.history['loss'])
-plt.show()
-
-for i in range(len(x_hour)):
-    x_np_hour = np.array(x_hour[i])
-    inp_hour = x_np_hour.reshape(1, len(x_hour[i]), len(x_hour[i][0]))
-    x_np_day = np.array(x_day[i])
-    inp_day = x_np_day.reshape(1, len(x_day[i]), len(x_day[i][0]))
-    pred = model.predict([inp_hour, inp_day], verbose=0)
-    pred_list = pred[0].tolist()
-    print(f"x_hour[{i}] = {x_hour[i]},   x_day[{i}] = {x_day[i]},   pred_list = {pred_list}")
+# main_input = Input(shape=(len(x_hour[0]),len(x_hour[0][0])), name='main_input')
+# lstm_out = LSTM(8)(main_input)
+# day_input = Input(shape=(len(x_day[0]),len(x_day[0][0])), name='day_input')
+# lstm_day_out = LSTM(8)(day_input)
+# x = tf.keras.layers.concatenate([lstm_out, lstm_day_out])
+# main_output = Dense(1, activation='sigmoid', name='main_output')(x)
+# model = tf.keras.models.Model(inputs=[main_input, day_input], outputs=[main_output])
+# model.compile(optimizer='adam', loss={'main_output': 'binary_crossentropy'})
+# history = model.fit({'main_input': np.array(x_hour), 'day_input': np.array(x_day)}, {'main_output': np.array(y_hour)}, epochs=1000, batch_size=1)
+# plt.figure(figsize=(12,5))
+# plt.plot(history.history['loss'])
+# plt.show()
+#
+# for i in range(len(x_hour)):
+#     x_np_hour = np.array(x_hour[i])
+#     inp_hour = x_np_hour.reshape(1, len(x_hour[i]), len(x_hour[i][0]))
+#     x_np_day = np.array(x_day[i])
+#     inp_day = x_np_day.reshape(1, len(x_day[i]), len(x_day[i][0]))
+#     pred = model.predict([inp_hour, inp_day], verbose=0)
+#     pred_list = pred[0].tolist()
+#     print(f"x_hour[{i}] = {x_hour[i]},   x_day[{i}] = {x_day[i]},   pred_list = {pred_list}")
 
 
 
@@ -91,16 +91,12 @@ data_sources_meta = [
         normalizers=[
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
-        ], visualize=[("candle", [1,2,3,4]), ("line", [5])], visualize_ratio=[3,1], visualize_name=["price", "volume"]),
+        ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
 ] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных жанных, которые нумеруются от 1 до колчества индексов в data_indexes
-# features.DataSourceMeta(files=[
-#         "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_0_30.csv",
-#         "E:/Моя папка/data/binance/ETHUSDT-1h-2020-01 - 2023-01  lim_20_50.csv"
-#     ], date_index = 0, data_indexes = [1,2,3,4,5],
-#     normalizers=[
-#         normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
-#         normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
-#     ], visualize=[("candle", [1,2,3,4]), ("line", [5])], visualize_ratio=[3,1], visualize_name=["price", "volume"])
+
+periods = [
+
+]
 
 data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
 

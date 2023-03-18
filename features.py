@@ -7,14 +7,57 @@ import mplfinance as mpf
 import pandas as pd
 import copy
 
+
+class DateTime:
+    MonthLengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    @classmethod
+    def is_leap_year(cls, year):
+        return True if year % 4 == 0 else False
+
+    @classmethod
+    def month_length(cls, year, month):
+        add_day = 1 if cls.is_leap_year(year) and month == 2 else 0
+        return cls.MonthLengths[month - 1] + add_day
+
+    def __init__(self, date_time):
+        self.date_time = date_time
+        print(f"DateTime __init__() self.date_time={self.date_time}")
+
+    def add_years(self, years):
+        self.date_time = datetime.datetime(self.date_time.year + years, self.date_time.month, self.date_time.day)
+
+    def add_months(self, months):
+        years = months // 12
+        months_remaind = months % 12
+        if years > 0:
+            self.add_years(years)
+        self.date_time = datetime.datetime(self.date_time.year, self.date_time.month + months_remaind, min(self.date_time.day, self.month_length(self.date_time.year, self.date_time.month + months_remaind)))
+
+    def add_days(self, days):
+        days_remaind = days
+        while days_remaind > 0:
+            days_to_next_month = self.MonthLengths[self.date_time.month - 1] - self.date_time.day + 1
+            if days_remaind >= days_to_next_month:
+                days_remaind -= days_to_next_month
+                self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, 1)
+                self.add_months(1)
+            else:
+                days_remaind -= days_remaind
+                self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, self.date_time.day + days_remaind)
+
+class Period:
+    def __init__(self, date_time_start, learning_duration, testing_duration):
+        pass
+
 class DataSourceMeta:
-    def __init__(self, files, date_index, data_indexes, normalizers, visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
+    def __init__(self, files, date_index, data_indexes, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
         self.files = files # список с файлами
         self.date_index = date_index # индекс даты
         self.data_indexes = data_indexes # индексы данных, которые нужно считать из файла
         self.normalizers = normalizers # список с нормализаторами для источника данных
         self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "line". Для "candle" может быть передано или 4 или 2 индекса данных, для "line" может быть передан только один индекс данных. Пример графиков цены и объема: [("candle", [1,2,3,4]), ("line", [5])]
-        self.visualize_ratio = visualize_ratio # список со значениями размера панелей visualize
+        self.is_visualize = is_visualize # нужно ли визуализировать источник данных
+        self.visualize_ratio = visualize_ratio  # список со значениями размера панелей visualize
         self.visualize_name = visualize_name  # список с названиями панелей visualize
         self.visualize_data_source_panel = visualize_data_source_panel  # номер панели visualize в имени которой будет название источника данных (первого файла)
 
