@@ -94,9 +94,23 @@ data_sources_meta = [
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
 ] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных жанных, которые нумеруются от 1 до колчества индексов в data_indexes
 
-periods = [
+# генератор создает периоды, начало последующего периода сдвинуто от начала предыдущего на длительность теста предыдущего периода
+periods_generator_start = features.DateTime(year=2020, month=2, day=1)
+periods_generator_learning_duration = features.Duration(years=0, months=0, days=377)
+periods_generator_testing_duration = features.Duration(years=0, months=0, days=377)
+periods_generator_count = 5
 
+periods = [
+    # features.Period(features.DateTime(year=2020, month=2, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0)),
+    # features.Period(features.DateTime(year=2020, month=3, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0))
 ]
+last_period_date_time_start = periods_generator_start.date_time
+for i in range(periods_generator_count):
+    period_date_time_start = features.DateTime(date_time=last_period_date_time_start)
+    if i > 0:
+        period_date_time_start.add_duration(periods_generator_testing_duration)
+    last_period_date_time_start = period_date_time_start.date_time
+    periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration))
 
 data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
 

@@ -19,35 +19,60 @@ class DateTime:
         add_day = 1 if cls.is_leap_year(year) and month == 2 else 0
         return cls.MonthLengths[month - 1] + add_day
 
-    def __init__(self, date_time):
-        self.date_time = date_time
-        print(f"DateTime __init__() self.date_time={self.date_time}")
+    # предполагается передавать либо date_time либо year, month и day
+    def __init__(self, date_time=None, year=None, month=None, day=None):
+        if date_time != None:
+            self.date_time = datetime.datetime(date_time.year, date_time.month, date_time.day)
+        else:
+            self.date_time = datetime.datetime(year, month, day)
 
     def add_years(self, years):
         self.date_time = datetime.datetime(self.date_time.year + years, self.date_time.month, self.date_time.day)
 
     def add_months(self, months):
-        years = months // 12
-        months_remaind = months % 12
+        new_month = self.date_time.month + months - 1
+        years = new_month // 12
+        months_remaind = new_month % 12 + 1
         if years > 0:
             self.add_years(years)
-        self.date_time = datetime.datetime(self.date_time.year, self.date_time.month + months_remaind, min(self.date_time.day, self.month_length(self.date_time.year, self.date_time.month + months_remaind)))
+        self.date_time = datetime.datetime(self.date_time.year, months_remaind, min(self.date_time.day, self.month_length(self.date_time.year, months_remaind)))
 
     def add_days(self, days):
         days_remaind = days
         while days_remaind > 0:
-            days_to_next_month = self.MonthLengths[self.date_time.month - 1] - self.date_time.day + 1
+            days_to_next_month = self.month_length(self.date_time.year, self.date_time.month) - self.date_time.day + 1
             if days_remaind >= days_to_next_month:
                 days_remaind -= days_to_next_month
                 self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, 1)
                 self.add_months(1)
             else:
-                days_remaind -= days_remaind
                 self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, self.date_time.day + days_remaind)
+                days_remaind -= days_remaind
+
+    def add_duration(self, duration):
+        self.add_years(duration.years)
+        self.add_months(duration.months)
+        self.add_days(duration.days)
+
+class Duration:
+    def __init__(self, years, months, days):
+        self.years = years
+        self.months = months
+        self.days = days
 
 class Period:
     def __init__(self, date_time_start, learning_duration, testing_duration):
-        pass
+        self.learning_start = DateTime(date_time=date_time_start.date_time)
+        self.learning_end = DateTime(date_time=date_time_start.date_time)
+        self.learning_end.add_years(learning_duration.years)
+        self.learning_end.add_months(learning_duration.months)
+        self.learning_end.add_days(learning_duration.days)
+
+        self.testing_start = DateTime(date_time=self.learning_end.date_time)
+        self.testing_end = DateTime(date_time=self.learning_end.date_time)
+        self.testing_end.add_years(testing_duration.years)
+        self.testing_end.add_months(testing_duration.months)
+        self.testing_end.add_days(testing_duration.days)
 
 class DataSourceMeta:
     def __init__(self, files, date_index, data_indexes, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
