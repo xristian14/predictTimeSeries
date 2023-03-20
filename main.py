@@ -92,25 +92,46 @@ data_sources_meta = [
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
-] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных жанных, которые нумеруются от 1 до колчества индексов в data_indexes
+] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных данных, которые нумеруются от 1 до колчества индексов в data_indexes
+
+loaded_models = []
+is_load_models = True
+if is_load_models:
+    loaded_models = [
+        tf.keras.models.load_model("path_0"),
+        tf.keras.models.load_model("path_1")
+    ]
+
+available_best_model_criteria = {"learn": "learn", "validation": "validation", "test": "test"} # возможные критерии оценки выбора лучшей модели
+best_model_criteria = available_best_model_criteria["test"] # критерий оценки выбора лучшей модели
 
 # генератор создает периоды, начало последующего периода сдвинуто от начала предыдущего на длительность теста предыдущего периода
+is_generate_periods = True # генерировать периоды, или использовать указанные в списке periods
 periods_generator_start = features.DateTime(year=2020, month=2, day=1)
 periods_generator_learning_duration = features.Duration(years=0, months=0, days=377)
 periods_generator_testing_duration = features.Duration(years=0, months=0, days=377)
+periods_generator_model_learn_count = 1 # сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
+periods_generator_model_desired_loss = 0 # желаемая ошибка для best_model_criteria, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
 periods_generator_count = 5
+periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
 
-periods = [
-    # features.Period(features.DateTime(year=2020, month=2, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0)),
-    # features.Period(features.DateTime(year=2020, month=3, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0))
-]
-last_period_date_time_start = periods_generator_start.date_time
-for i in range(periods_generator_count):
-    period_date_time_start = features.DateTime(date_time=last_period_date_time_start)
-    if i > 0:
-        period_date_time_start.add_duration(periods_generator_testing_duration)
-    last_period_date_time_start = period_date_time_start.date_time
-    periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration))
+periods = []
+if is_generate_periods:
+    last_period_date_time_start = periods_generator_start.date_time
+    for i in range(periods_generator_count):
+        period_date_time_start = features.DateTime(date_time=last_period_date_time_start)
+        if i > 0:
+            period_date_time_start.add_duration(periods_generator_testing_duration)
+        last_period_date_time_start = period_date_time_start.date_time
+        if not periods_generator_is_load_models:
+            periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration, periods_generator_model_learn_count, periods_generator_model_desired_loss, best_model_criteria))
+        else:
+            periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration, periods_generator_model_learn_count, periods_generator_model_desired_loss, best_model_criteria, loaded_models[i]))
+else:
+    periods = [
+        features.Period(features.DateTime(year=2020, month=2, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, best_model_criteria, loaded_models[0]),
+        features.Period(features.DateTime(year=2020, month=3, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, best_model_criteria, loaded_models[1])
+    ]
 
 data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
 

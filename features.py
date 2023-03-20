@@ -61,18 +61,25 @@ class Duration:
         self.days = days
 
 class Period:
-    def __init__(self, date_time_start, learning_duration, testing_duration):
+    # model_learn_count - сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
+    # model_desired_loss - желаемая ошибка, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
+    # best_model_criteria - критерий оценки выбора лучшей модели (по ошибке обучения, по ошибки валидации, по ошибки теста)
+    # model - если есть обученная модель, и не нужно проводить обучение, её следует передать в этот параметр
+    def __init__(self, date_time_start, learning_duration, testing_duration, model_learn_count, model_desired_loss, best_model_criteria, model=None):
         self.learning_start = DateTime(date_time=date_time_start.date_time)
         self.learning_end = DateTime(date_time=date_time_start.date_time)
-        self.learning_end.add_years(learning_duration.years)
-        self.learning_end.add_months(learning_duration.months)
-        self.learning_end.add_days(learning_duration.days)
+        self.learning_end.add_duration(learning_duration)
 
         self.testing_start = DateTime(date_time=self.learning_end.date_time)
         self.testing_end = DateTime(date_time=self.learning_end.date_time)
-        self.testing_end.add_years(testing_duration.years)
-        self.testing_end.add_months(testing_duration.months)
-        self.testing_end.add_days(testing_duration.days)
+        self.testing_end.add_duration(testing_duration)
+
+        self.model_learn_count = model_learn_count
+        if model_learn_count < 1:
+            raise ValueError(f"model_learn_count должно быть не менее 1")
+        self.model_desired_loss = model_desired_loss
+        self.best_model_criteria = best_model_criteria
+        self.model = model
 
 class DataSourceMeta:
     def __init__(self, files, date_index, data_indexes, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
@@ -145,10 +152,6 @@ class DataManager:
         self.data_sources = []  # данные всех файлов всех источников данных
         for i_ds in range(len(data_sources_meta)):
             self.data_sources.append([self.read_csv_file(file, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file in data_sources_meta[i_ds].files])
-            # data_source_files = []
-            # for i_f in range(len(data_sources_meta[i_ds].files)):
-            #     data_source_files.append(self.read_csv_file(data_sources_meta[i_ds].files[i_f], data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes))
-            # self.data_sources.append(data_source_files)
 
         # проверяем, совпадает ли: количество файлов у разных источников данных, количество данных в файлах разных источников данных, даты в данных разных источников данных
         is_files_fit = True
