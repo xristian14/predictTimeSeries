@@ -322,9 +322,96 @@ class DataManager:
         # else:
         #     raise ValueError(error_messages[0])
 
-    def get_learning_data(self, datetime_start, datetime_end):
+    # создает для всех данных источников данных в рамках периодов нормализованные входные последовательности, и выход для учебных данных
+
+    def get_data_sources_input_sequence(self, i_f, i_last_input_candle):
+        data_sources_inp_seq = []
+        for i_ds in range(len(self.data_sources)):
+            data_source_inp_seq = []
+            for i_seq in range(i_last_input_candle + 1 - self.sequence_length, i_last_input_candle + 1):
+                data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+            data_sources_inp_seq.append(data_source_inp_seq)
+        return data_sources_inp_seq
+
+    def get_data_sources_output(self, i_f, i_output_candle):
+        data_sources_output = []
+        for i_ds in range(len(self.data_sources)):
+            data_sources_output.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_output_candle]))
+        return data_sources_output
+
+    # создает входные последовательности, соответствующие им выходные значения и настройки для денормализации, для дат: от начала до окончания периодов
+    def create_data_sources_periods_x_y(self):
+        print("Создание входных последовательностей.")
+        # создаю список, заполненный None, размерностью self.data_sources[0]
+        self.data_sources_periods = [[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))]
+        # доходим до первой свечки начала периодов
+        i_f = 0
+        i_c = 0
+        while self.data_sources[0][i_f][i_c][0] < self.periods_start_timestamp:
+            i_c += 1
+            if i_c >= len(self.data_sources[0][i_f]):
+                i_c = 0
+                i_f += 1
+        current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+        while current_datetime_timestamp <= self.periods_end_timestamp:
+            data_sources_inp_seq = self.get_data_sources_input_sequence(self, i_f, i_c - 1)
+            data_sources_output = self.get_data_sources_output(i_f, i_c)
+            x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
+            self.data_sources_periods[i_f][i_c] = (x, y, data_sources_normalizers_settings)
+
+            while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
+                i_c += 1
+                if i_c >= len(self.data_sources[0][i_f]):
+                    i_c = 0
+                    i_f += 1
+            current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+
+    def get_learning_data(self, datetime_start_timestamp, datetime_end_timestamp):
+        # доходим до первой свечки начала периодов
+        i_f = 0
+        i_c = 0
+        while self.data_sources[0][i_f][i_c][0] < datetime_start_timestamp:
+            i_c += 1
+            if i_c >= len(self.data_sources[0][i_f]):
+                i_c = 0
+                i_f += 1
+        current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+
+        x_learn = []
+        y_learn = []
+        x_valid = []
+        y_valid = []
+
         learn_count = 0
         valid_count = 0
+        data_types = [0, 1] # 0 - учебные, 1 - валидационные
+        while current_datetime_timestamp <= datetime_end_timestamp:
+            learn_part = learn_count / (learn_count + valid_count)
+            valid_part = valid_count / (learn_count + valid_count)
+            if learn_part < 1 - self.validation_split and valid_part < self.validation_split:
+                data_type = random.choice(data_types)
+            elif learn_part < 1 - self.validation_split:
+                data_type = data_types[0]
+            else:
+                data_type = data_types[1]
+
+            data_sources_inp_seq = self.get_data_sources_input_sequence(self, i_f, i_c - 1)
+            data_sources_output = self.get_data_sources_output(i_f, i_c)
+
+            x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
+
+            if data_type == data_types[0]:
+                x_learn.append(x)
+                y_learn.append(y)
+
+
+
+            while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
+                i_c += 1
+                if i_c >= len(self.data_sources[0][i_f]):
+                    i_c = 0
+                    i_f += 1
+            current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
 
     def handle_period(self, period):
         pass
@@ -372,6 +459,11 @@ class DataManager:
                 print(message)
             raise ValueError(error_messages[0])
 
+        self.periods_start_timestamp = utc_datetime_to_timestamp(self.periods[0].learning_start.date_time)
+        self.periods_end_timestamp = utc_datetime_to_timestamp(self.periods[-1].testing_end.date_time)
+
+        self.create_data_sources_periods_x_y()
+
         for i in range(len(self.periods)):
             self.handle_period(self.periods[i])
 
@@ -415,9 +507,9 @@ class DataManager:
 
         return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
-    """денормализует входные последовательности для всех нормализаторов, всех источников данных, а так же выходное значение если оно указано
-        input_vectors_sequence - последовательности входных данных для всех источников данных, для всех нормализаторов
-        возвращает входную последовательность для всех источников данных и выходное значение для всех источников данных"""
+    # Денормализует входные последовательности для всех нормализаторов, всех источников данных, а так же выходное значение если оно указано
+    # input_vectors_sequence - последовательности входных данных для всех источников данных, для всех нормализаторов
+    # возвращает входную последовательность для всех источников данных и выходное значение для всех источников данных
     def denormalize_input_vectors_sequence_output_vector(self, data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=None):
         data_sources_normalizers_inp_seq = self.input_vectors_sequence_to_data_sources_normalizers(input_vectors_sequence) if input_vectors_sequence != None else None
         data_sources_normalizers_out = self.output_vector_to_data_sources_normalizers(output_vector) if output_vector != None else None
