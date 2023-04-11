@@ -1,4 +1,6 @@
 import os
+import sys
+
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -69,25 +71,22 @@ from tensorflow.keras.optimizers import Adam
 
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
-data_split_sequence_length = 7 # данные в обучающую, валидационную и тестовую выборки будут добавляться последовательностями данной длины
 validation_split = 0.05 # размер данных для валидации относительно всех данных
-test_split = 0.25 # размер тестовых данных относительно всех данных
-sequence_length = 600 # длина последовательных данных для которых делается прогноз следующего значения
-predict_length = 72 # количество шагов на которое будут спрогнозированы данные
+sequence_length = 300 # длина последовательных данных для которых делается прогноз следующего значения
+predict_length = 48 # количество шагов на которое будут спрогнозированы данные
 part_learn_predict = 0.01 # часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-part_test_predict = 0.03 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-part_learn_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, которые начинаются обучающих данных. (True, 20) - количество визуализаций для которого вероятность подберется автоматически
-part_test_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, которые начинаются на тестовых данных. (True, 20) - количество визуализаций для которого вероятность подберется автоматически
+part_test_predict = 0.1 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
+part_learn_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
+part_test_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
 is_visualize_prediction_union = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Все источники данных будут на одном изображении
 is_visualize_prediction_single = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Каждый источник данных будет на собственном изображении.
 visualize_prediction_cut = 400 # до какой длины обрезать визуализируемые данные. Чтобы если длина последовательности и длина предсказания большие, можно было понять как предсказание корелирует с истинными данными. Независимо от данного значения, визуализированы будут все данные предсказания.
-is_save_predict_data = False # сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных, включая валидационные. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
-first_file_offset = 10 # отступ от начала данных первого файла в источниках данных
+is_save_predict_data = False # сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
 over_rate = 0 # подставляю это значение в параметр нормализаторов, определяет насколько больше будет диапазон нормализации относительно формата: вплотную, 0.1 - на 10% больше
 data_sources_meta = [
     features.DataSourceMeta(files=[
             "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 lim_0_3000.csv"
-        ], date_index = 0, data_indexes = [1,2,3,4,5],
+        ], date_index = 0, data_indexes = [1,2,3,4,5], is_save_data=True,
         normalizers=[
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
@@ -95,28 +94,25 @@ data_sources_meta = [
 ] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных данных, которые нумеруются от 1 до колчества индексов в data_indexes
 
 loaded_models = []
-is_load_models = True
+is_load_models = False
 if is_load_models:
     loaded_models = [
         tf.keras.models.load_model("path_0"),
         tf.keras.models.load_model("path_1")
     ]
 
-available_best_model_criteria = {"learn": "learn", "validation": "validation", "test": "test"} # возможные критерии оценки выбора лучшей модели
-best_model_criteria = available_best_model_criteria["test"] # критерий оценки выбора лучшей модели
-
 # генератор создает периоды, начало последующего периода сдвинуто от начала предыдущего на длительность теста предыдущего периода
 is_generate_periods = True # генерировать периоды, или использовать указанные в списке periods
+periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
 periods_generator_start = features.DateTime(year=2020, month=2, day=1)
 periods_generator_learning_duration = features.Duration(years=0, months=0, days=377)
 periods_generator_testing_duration = features.Duration(years=0, months=0, days=377)
 periods_generator_model_learn_count = 1 # сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
 periods_generator_model_desired_loss = 0 # желаемая ошибка для best_model_criteria, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
-periods_generator_count = 5
-periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
+periods_generator_count = 5 # количество периодов
 
-periods = []
 if is_generate_periods:
+    periods = []
     last_period_date_time_start = periods_generator_start.date_time
     for i in range(periods_generator_count):
         period_date_time_start = features.DateTime(date_time=last_period_date_time_start)
@@ -124,16 +120,16 @@ if is_generate_periods:
             period_date_time_start.add_duration(periods_generator_testing_duration)
         last_period_date_time_start = period_date_time_start.date_time
         if not periods_generator_is_load_models:
-            periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration, periods_generator_model_learn_count, periods_generator_model_desired_loss, best_model_criteria))
+            periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration, periods_generator_model_learn_count, periods_generator_model_desired_loss))
         else:
-            periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration, periods_generator_model_learn_count, periods_generator_model_desired_loss, best_model_criteria, loaded_models[i]))
+            periods.append(features.Period(period_date_time_start, periods_generator_learning_duration, periods_generator_testing_duration, periods_generator_model_learn_count, periods_generator_model_desired_loss, loaded_models[i]))
 else:
     periods = [
-        features.Period(features.DateTime(year=2020, month=2, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, best_model_criteria, loaded_models[0]),
-        features.Period(features.DateTime(year=2020, month=3, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, best_model_criteria, loaded_models[1])
+        features.Period(features.DateTime(year=2020, month=2, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, loaded_models[0]),
+        features.Period(features.DateTime(year=2020, month=3, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, loaded_models[1])
     ]
 
-data_manager = features.DataManager(data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split)
+data_manager = features.DataManager(data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods)
 
 model = Sequential()
 model.add(Input((sequence_length, len(data_manager.x_learn[0][0]))))
@@ -143,7 +139,7 @@ model.add(Dense(len(data_manager.y_learn[0]), activation='sigmoid'))
 model.summary()
 
 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
-#"binary_crossentropy"
+#"binary_crossentropy" tf.keras.losses.MeanAbsolutePercentageError()
 
 history = model.fit(np.array(data_manager.x_learn), np.array(data_manager.y_learn), batch_size=32, epochs=200, validation_data=(np.array(data_manager.x_valid), np.array(data_manager.y_valid)))
 

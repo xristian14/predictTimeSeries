@@ -8,6 +8,25 @@ import pandas as pd
 import copy
 
 
+# функция возвращает дату в формате UTC+00:00
+def timestamp_to_utc_datetime(date):
+    return datetime.datetime.utcfromtimestamp(date / 1000).replace(tzinfo=datetime.timezone.utc)
+# функция возвращает наивную дату
+def timestamp_to_local_datetime(date):
+    return datetime.datetime.fromtimestamp(date / 1000)
+# функция принимает дату в формате UTC+00:00
+def utc_datetime_to_timestamp(date):
+    return int(calendar.timegm(date.timetuple()) * 1000)
+# функция принимает наивную дату
+def local_datetime_to_timestamp(date):
+    return int(time.mktime(date.timetuple()) * 1000)
+
+def timedelta_to_milliseconds(timedelta):
+    return timedelta.total_seconds() * 1000
+
+def float_to_str_format(value, digits=0):
+    return f"{value:.{digits}f}"
+
 class DateTime:
     MonthLengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     @classmethod
@@ -63,9 +82,8 @@ class Duration:
 class Period:
     # model_learn_count - сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
     # model_desired_loss - желаемая ошибка, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
-    # best_model_criteria - критерий оценки выбора лучшей модели (по ошибке обучения, по ошибки валидации, по ошибки теста)
     # model - если есть обученная модель, и не нужно проводить обучение, её следует передать в этот параметр
-    def __init__(self, date_time_start, learning_duration, testing_duration, model_learn_count, model_desired_loss, best_model_criteria, model=None):
+    def __init__(self, date_time_start, learning_duration, testing_duration, model_learn_count, model_desired_loss, model=None):
         self.learning_start = DateTime(date_time=date_time_start.date_time)
         self.learning_end = DateTime(date_time=date_time_start.date_time)
         self.learning_end.add_duration(learning_duration)
@@ -78,14 +96,14 @@ class Period:
         if model_learn_count < 1:
             raise ValueError(f"model_learn_count должно быть не менее 1")
         self.model_desired_loss = model_desired_loss
-        self.best_model_criteria = best_model_criteria
         self.model = model
 
 class DataSourceMeta:
-    def __init__(self, files, date_index, data_indexes, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
+    def __init__(self, files, date_index, data_indexes, is_save_data, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
         self.files = files # список с файлами
         self.date_index = date_index # индекс даты
         self.data_indexes = data_indexes # индексы данных, которые нужно считать из файла
+        self.is_save_data = is_save_data # сохранять ли спрогнозированные данные для данного источника данных
         self.normalizers = normalizers # список с нормализаторами для источника данных
         self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "line". Для "candle" может быть передано или 4 или 2 индекса данных, для "line" может быть передан только один индекс данных. Пример графиков цены и объема: [("candle", [1,2,3,4]), ("line", [5])]
         self.is_visualize = is_visualize # нужно ли визуализировать источник данных
@@ -111,33 +129,40 @@ class DataManager:
                     data.append(data_line)
         return data
 
-    def create_save_folders(self):
+    def create_base_folder(self):
         app_files_folder_name = "app_data"
         if not os.path.isdir(app_files_folder_name):
             os.makedirs(app_files_folder_name)
         folder_id = 0
         while os.path.isdir(f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"):
             folder_id += 1
-        self.folder_base = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
-        self.folder_images_learn_predict = f"{self.folder_base}/images/learn_predict"
-        self.folder_images_test_predict = f"{self.folder_base}/images/test_predict"
-        self.folder_images_learn_result = f"{self.folder_base}/images/learn_result"
+        self.base_folder = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
         os.makedirs(self.folder_base)
-        os.makedirs(f"{self.folder_base}/images")
-        os.makedirs(self.folder_images_learn_predict)
-        os.makedirs(self.folder_images_test_predict)
-        os.makedirs(self.folder_images_learn_result)
+        # self.folder_images_learn_predict = f"{self.folder_base}/images/learn_predict"
+        # self.folder_images_test_predict = f"{self.folder_base}/images/test_predict"
+        # self.folder_images_learn_result = f"{self.folder_base}/images/learn_result"
+        # os.makedirs(f"{self.folder_base}/images")
+        # os.makedirs(self.folder_images_learn_predict)
+        # os.makedirs(self.folder_images_test_predict)
+        # os.makedirs(self.folder_images_learn_result)
 
-    def __init__(self, data_sources_meta, first_file_offset, sequence_length, data_split_sequence_length, validation_split, test_split):
+    def __init__(self, data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods):
         # создаем папки для сохранения информации
-        self.create_save_folders()
+        self.create_base_folder()
 
         self.data_sources_meta = data_sources_meta
-        self.first_file_offset = first_file_offset # отступ в еденицах данных (свечках) от начала первого файла. (на случай если это экспирируемые фьючерсные контракты, и файлы с данными имеют запас перед главными торговыми датами данного контракта, чтобы обучение и тестирование выполнялось в главные торговые даты данного контракта.) (впоследствии, если это экспирируемые фьючерсные контракты, данные для следующих файлов будут выбираться как следующая дата за последней датой предыдущего файла.)
-        self.sequence_length = sequence_length
-        self.data_split_sequence_length = data_split_sequence_length
         self.validation_split = validation_split
-        self.test_split = test_split
+        self.sequence_length = sequence_length
+        self.predict_length = predict_length
+        self.part_learn_predict = part_learn_predict
+        self.part_test_predict = part_test_predict
+        self.part_learn_predict_visualize = part_learn_predict_visualize
+        self.part_test_predict_visualize = part_test_predict_visualize
+        self.is_visualize_prediction_union = is_visualize_prediction_union
+        self.is_visualize_prediction_single = is_visualize_prediction_single
+        self.visualize_prediction_cut = visualize_prediction_cut
+        self.is_save_predict_data = is_save_predict_data
+        self.periods = periods
 
         # определяем имена файлов без полных путей
         self.data_sources_file_names = []  # имена файлов источников данных без полного пути
@@ -182,109 +207,123 @@ class DataManager:
         for message in error_messages[:25]:
             print(message)
 
-        # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
-        if is_files_fit:
-            self.data_interval = self.data_sources[0][0][1][0] - self.data_sources[0][0][0][0]
-            if len(self.data_sources[0][0]) > 9:
-                for i in range(9):
-                    if self.data_sources[0][0][i + 1][0] - self.data_sources[0][0][i][0] != self.data_interval:
-                        raise ValueError("При определении временного интервала данных, в первых 10 данных обнаружены разные временные интервалы.")
-            else:
-                raise ValueError("Количество данных в файле должно быть не менее 10.")
-            # опредлеяем типы данных для всех свечек
-            self.data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
-            learn_count = 0
-            valid_count = 0
-            test_count = 0
-            sequence_number = 0
-            data_types = [0, 1, 2]
-            data_type = data_types[random.randint(0, 2)]
-            last_file_date = None
-            for i_f in range(len(self.data_sources[0])):
-                file_data_types = []
-                for i_c in range(len(self.data_sources[0][i_f])):
-                    is_next_date = False
-                    if last_file_date != None:
-                        if self.data_sources[0][i_f][i_c][0] > last_file_date:
-                            is_next_date = True
-                            last_file_date = self.data_sources[0][i_f][i_c][0]
-                    else:
-                        last_file_date = self.data_sources[0][i_f][i_c][0]
-                        is_next_date = True
-
-                    if sequence_number >= data_split_sequence_length:
-                        sequence_number = 0
-                        # выбираем случайный тип среди тех, которые составляют от всех данных меньшую часть чем указано для них, если ни один из типов не является меньше указанного, выбираем случайный тип
-                        data_types_less_than_split = []  # типы данных, количество которых меньше чем их указанное в настройках количество
-                        if learn_count / (learn_count + valid_count + test_count) < 1 - (validation_split + test_split):
-                            data_types_less_than_split.append(data_types[0])
-                        if valid_count / (learn_count + valid_count + test_count) < validation_split:
-                            data_types_less_than_split.append(data_types[1])
-                        if test_count / (learn_count + valid_count + test_count) < test_split:
-                            data_types_less_than_split.append(data_types[2])
-
-                        if len(data_types_less_than_split) > 0:
-                            data_type = random.choice(data_types_less_than_split)
-                        else:
-                            data_type = data_types[random.randint(0, 2)]
-
-                    if i_c >= sequence_length and (i_c >= first_file_offset if i_f == 0 else True) and is_next_date:
-                        file_data_types.append(data_type)
-                        if data_type == data_types[0]:
-                            learn_count += 1
-                        elif data_type == data_types[1]:
-                            valid_count += 1
-                        else:
-                            test_count += 1
-                        sequence_number += 1
-                    else:
-                        file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length или это первый файл и мы не отошли от начала на first_file_offset или текущая свечка не является следующей за последней датой, отмечаем что она не относится ни к одной выборке
-                self.data_sources_data_type.append(file_data_types)
-
-            # выполняем подготовку нормализаторов
-            for i_ds in range(len(data_sources_meta)):
-                for i_n in range(len(data_sources_meta[i_ds].normalizers)):
-                    data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources[i_ds], self.data_sources_data_type, self.sequence_length)
-
-            # формируем обучающие, валидационные и тестовые данные
-            self.x_learn = []
-            self.y_learn = []
-            self.x_valid = []
-            self.y_valid = []
-            self.x_test = []
-            self.y_test = []
-            for i_f in range(len(self.data_sources_data_type)):
-                for i_c in range(len(self.data_sources_data_type[i_f])):
-                    if self.data_sources_data_type[i_f][i_c] != -1:
-
-                        data_sources_inp_seq = []
-                        for i_ds in range(len(self.data_sources)):
-                            data_source_inp_seq = []
-                            for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
-                                data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
-                            data_sources_inp_seq.append(data_source_inp_seq)
-
-                        data_sources_output = []
-                        for i_ds in range(len(self.data_sources)):
-                            data_sources_output.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_c]))
-
-                        x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
-                        if self.data_sources_data_type[i_f][i_c] == 0:
-                            self.x_learn.append(x)
-                            self.y_learn.append(y)
-                        elif self.data_sources_data_type[i_f][i_c] == 1:
-                            self.x_valid.append(x)
-                            self.y_valid.append(y)
-                        elif self.data_sources_data_type[i_f][i_c] == 2:
-                            self.x_test.append(x)
-                            self.y_test.append(y)
-        else:
+        if not is_files_fit:
             raise ValueError(error_messages[0])
 
+        # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
+        # if is_files_fit:
+        #     self.data_interval = self.data_sources[0][0][1][0] - self.data_sources[0][0][0][0]
+        #     if len(self.data_sources[0][0]) > 9:
+        #         for i in range(9):
+        #             if self.data_sources[0][0][i + 1][0] - self.data_sources[0][0][i][0] != self.data_interval:
+        #                 raise ValueError("При определении временного интервала данных, в первых 10 данных обнаружены разные временные интервалы.")
+        #     else:
+        #         raise ValueError("Количество данных в файле должно быть не менее 10.")
+        #     # опредлеяем типы данных для всех свечек
+        #     self.data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
+        #     learn_count = 0
+        #     valid_count = 0
+        #     test_count = 0
+        #     sequence_number = 0
+        #     data_types = [0, 1, 2]
+        #     data_type = data_types[random.randint(0, 2)]
+        #     last_file_date = None
+        #     for i_f in range(len(self.data_sources[0])):
+        #         file_data_types = []
+        #         for i_c in range(len(self.data_sources[0][i_f])):
+        #             is_next_date = False
+        #             if last_file_date != None:
+        #                 if self.data_sources[0][i_f][i_c][0] > last_file_date:
+        #                     is_next_date = True
+        #                     last_file_date = self.data_sources[0][i_f][i_c][0]
+        #             else:
+        #                 last_file_date = self.data_sources[0][i_f][i_c][0]
+        #                 is_next_date = True
+        #
+        #             if sequence_number >= data_split_sequence_length:
+        #                 sequence_number = 0
+        #                 # выбираем случайный тип среди тех, которые составляют от всех данных меньшую часть чем указано для них, если ни один из типов не является меньше указанного, выбираем случайный тип
+        #                 data_types_less_than_split = []  # типы данных, количество которых меньше чем их указанное в настройках количество
+        #                 if learn_count / (learn_count + valid_count + test_count) < 1 - (validation_split + test_split):
+        #                     data_types_less_than_split.append(data_types[0])
+        #                 if valid_count / (learn_count + valid_count + test_count) < validation_split:
+        #                     data_types_less_than_split.append(data_types[1])
+        #                 if test_count / (learn_count + valid_count + test_count) < test_split:
+        #                     data_types_less_than_split.append(data_types[2])
+        #
+        #                 if len(data_types_less_than_split) > 0:
+        #                     data_type = random.choice(data_types_less_than_split)
+        #                 else:
+        #                     data_type = data_types[random.randint(0, 2)]
+        #
+        #             if i_c >= sequence_length and (i_c >= first_file_offset if i_f == 0 else True) and is_next_date:
+        #                 file_data_types.append(data_type)
+        #                 if data_type == data_types[0]:
+        #                     learn_count += 1
+        #                 elif data_type == data_types[1]:
+        #                     valid_count += 1
+        #                 else:
+        #                     test_count += 1
+        #                 sequence_number += 1
+        #             else:
+        #                 file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length или это первый файл и мы не отошли от начала на first_file_offset или текущая свечка не является следующей за последней датой, отмечаем что она не относится ни к одной выборке
+        #         self.data_sources_data_type.append(file_data_types)
+        #
+        #     # выполняем подготовку нормализаторов
+        #     for i_ds in range(len(data_sources_meta)):
+        #         for i_n in range(len(data_sources_meta[i_ds].normalizers)):
+        #             data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources[i_ds], self.data_sources_data_type, self.sequence_length)
+        #
+        #     # формируем обучающие, валидационные и тестовые данные
+        #     self.x_learn = []
+        #     self.y_learn = []
+        #     self.x_valid = []
+        #     self.y_valid = []
+        #     self.x_test = []
+        #     self.y_test = []
+        #     for i_f in range(len(self.data_sources_data_type)):
+        #         for i_c in range(len(self.data_sources_data_type[i_f])):
+        #             if self.data_sources_data_type[i_f][i_c] != -1:
+        #
+        #                 data_sources_inp_seq = []
+        #                 for i_ds in range(len(self.data_sources)):
+        #                     data_source_inp_seq = []
+        #                     for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
+        #                         data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+        #                     data_sources_inp_seq.append(data_source_inp_seq)
+        #
+        #                 data_sources_output = []
+        #                 for i_ds in range(len(self.data_sources)):
+        #                     data_sources_output.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_c]))
+        #
+        #                 x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
+        #                 if self.data_sources_data_type[i_f][i_c] == 0:
+        #                     self.x_learn.append(x)
+        #                     self.y_learn.append(y)
+        #                 elif self.data_sources_data_type[i_f][i_c] == 1:
+        #                     self.x_valid.append(x)
+        #                     self.y_valid.append(y)
+        #                 elif self.data_sources_data_type[i_f][i_c] == 2:
+        #                     self.x_test.append(x)
+        #                     self.y_test.append(y)
+        # else:
+        #     raise ValueError(error_messages[0])
 
-    """нормализует входные последовательности для всех источников данных, а так же выходное значение если оно указано
-    data_sources_inp_seq - последовательности входных данных для всех источников данных
-    возвращает последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации вида: settings[i_ds][i_normalize]."""
+    def get_learning_data(self, datetime_start, datetime_end):
+        learn_count = 0
+        valid_count = 0
+
+    def handle_period(self, period):
+        pass
+
+    def periods_process(self):
+        # проверяем, есть ли данные для всех периодов
+        for i in range(len(self.periods)):
+            pass
+
+    # Нормализует входные последовательности для всех источников данных, а так же выходное значение если оно указано
+    # data_sources_inp_seq - последовательности входных данных для всех источников данных
+    # возвращает последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации вида: settings[i_ds][i_normalize].
     def normalize_data_sources(self, data_sources_inp_seq, data_sources_output=None):
         data_sources_normalizers_inp_seq = []
         data_sources_normalizers_out = []
