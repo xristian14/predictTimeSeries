@@ -3,6 +3,7 @@ import random
 import os
 import numpy as np
 import datetime
+import calendar
 import mplfinance as mpf
 import pandas as pd
 import copy
@@ -41,12 +42,12 @@ class DateTime:
     # предполагается передавать либо date_time либо year, month и day
     def __init__(self, date_time=None, year=None, month=None, day=None):
         if date_time != None:
-            self.date_time = datetime.datetime(date_time.year, date_time.month, date_time.day)
+            self.date_time = datetime.datetime(date_time.year, date_time.month, date_time.day, tzinfo=datetime.timezone.utc)
         else:
-            self.date_time = datetime.datetime(year, month, day)
+            self.date_time = datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
 
     def add_years(self, years):
-        self.date_time = datetime.datetime(self.date_time.year + years, self.date_time.month, self.date_time.day)
+        self.date_time = datetime.datetime(self.date_time.year + years, self.date_time.month, self.date_time.day, tzinfo=datetime.timezone.utc)
 
     def add_months(self, months):
         new_month = self.date_time.month + months - 1
@@ -54,7 +55,7 @@ class DateTime:
         months_remaind = new_month % 12 + 1
         if years > 0:
             self.add_years(years)
-        self.date_time = datetime.datetime(self.date_time.year, months_remaind, min(self.date_time.day, self.month_length(self.date_time.year, months_remaind)))
+        self.date_time = datetime.datetime(self.date_time.year, months_remaind, min(self.date_time.day, self.month_length(self.date_time.year, months_remaind)), tzinfo=datetime.timezone.utc)
 
     def add_days(self, days):
         days_remaind = days
@@ -62,10 +63,10 @@ class DateTime:
             days_to_next_month = self.month_length(self.date_time.year, self.date_time.month) - self.date_time.day + 1
             if days_remaind >= days_to_next_month:
                 days_remaind -= days_to_next_month
-                self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, 1)
+                self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, 1, tzinfo=datetime.timezone.utc)
                 self.add_months(1)
             else:
-                self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, self.date_time.day + days_remaind)
+                self.date_time = datetime.datetime(self.date_time.year, self.date_time.month, self.date_time.day + days_remaind, tzinfo=datetime.timezone.utc)
                 days_remaind -= days_remaind
 
     def add_duration(self, duration):
@@ -179,36 +180,48 @@ class DataManager:
             self.data_sources.append([self.read_csv_file(file, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file in data_sources_meta[i_ds].files])
 
         # проверяем, совпадает ли: количество файлов у разных источников данных, количество данных в файлах разных источников данных, даты в данных разных источников данных
-        is_files_fit = True
         error_messages = []
         if len(self.data_sources) > 1:
             # количество файлов у разных источников данных
             for i_ds in range(1, len(self.data_sources)):
                 if len(self.data_sources[i_ds]) != len(self.data_sources[0]):
-                    is_files_fit = False
-                    error_messages.append(f"Не совпадает количество файлов у источников данных: {self.data_sources_file_names[i_ds]} и {self.data_sources_file_names[0]}.")
+                    if len(error_messages) < 25:
+                        error_messages.append(f"Не совпадает количество файлов у источников данных: {self.data_sources_file_names[i_ds]} и {self.data_sources_file_names[0]}.")
             # количество данных в файлах разных источников данных
-            if is_files_fit:
+            if len(error_messages) == 0:
                 for i_f in range(len(self.data_sources[0])):
                     for i_ds in range(1, len(self.data_sources)):
                         if len(self.data_sources[i_ds][i_f]) != len(self.data_sources[0][i_f]):
-                            is_files_fit = False
-                            error_messages.append(f"Не совпадает количество свечек в файлах разных источников данных: {self.data_sources_file_names[i_ds][i_f]} и {self.data_sources_file_names[0][i_f]}.")
+                            if len(error_messages) < 25:
+                                error_messages.append(f"Не совпадает количество свечек в файлах разных источников данных: {self.data_sources_file_names[i_ds][i_f]} и {self.data_sources_file_names[0][i_f]}.")
             # даты в свечках разных источников данных
-            if is_files_fit:
+            if len(error_messages) == 0:
                 for i_f in range(len(self.data_sources[0])):
                     for i_c in range(len(self.data_sources[0][i_f])):
                         for i_ds in range(1, len(self.data_sources)):
                             if self.data_sources[i_ds][i_f][i_c][0] != self.data_sources[0][i_f][i_c][0]:
-                                is_files_fit = False
-                                error_messages.append(f"Не совпадают даты в данных разных источников данных: (файл={self.data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={self.data_sources[i_ds][i_f][i_c][0]}) и (файл={self.data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={self.data_sources[0][i_f][i_c][0]}).")
+                                if len(error_messages) < 25:
+                                    error_messages.append(f"Не совпадают даты в данных разных источников данных: (файл={self.data_sources_file_names[i_ds][i_f]}, индекс свечки={i_c}, дата={self.data_sources[i_ds][i_f][i_c][0]}) и (файл={self.data_sources_file_names[0][i_f]}, индекс свечки={i_c}, дата={self.data_sources[0][i_f][i_c][0]}).")
 
-        # выводим ошибки
-        for message in error_messages[:25]:
-            print(message)
+        if len(error_messages) == 0:
+            self.interval_milliseconds = self.data_sources[0][0][1][0] - self.data_sources[0][0][0][0]
+            for i_f in range(len(self.data_sources[0])):
+                for i_c in range(1, len(self.data_sources[0][i_f])):
+                    current_interval_milliseconds = self.data_sources[0][i_f][i_c][0] - self.data_sources[0][i_f][i_c - 1][0]
+                    if current_interval_milliseconds != self.interval_milliseconds:
+                        if len(error_messages) < 25:
+                            error_messages.append(f"i_ds=0, i_f={i_f}, i_c={i_c}, разрыв в данных.")
 
-        if not is_files_fit:
+        if len(error_messages) > 0:
+            for message in error_messages:
+                print(message)
             raise ValueError(error_messages[0])
+
+        self.data_sources_start_timestamp = self.data_sources[0][0][0][0]
+        self.data_sources_end_timestamp = None
+        for i_f in range(len(self.data_sources[0])):
+            for i_c in range(len(self.data_sources[0][i_f])):
+                self.data_sources_end_timestamp = self.data_sources[0][i_f][i_c][0]
 
         # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
         # if is_files_fit:
@@ -317,9 +330,52 @@ class DataManager:
         pass
 
     def periods_process(self):
-        # проверяем, есть ли данные для всех периодов
+        error_messages = []
+        is_increase = True
+        for i in range(1, len(self.periods)):
+            if utc_datetime_to_timestamp(self.periods[i - 1].learning_start.date_time) >= utc_datetime_to_timestamp(self.periods[i].learning_start.date_time):
+                is_increase = False
+            if utc_datetime_to_timestamp(self.periods[i - 1].learning_end.date_time) >= utc_datetime_to_timestamp(self.periods[i].learning_end.date_time):
+                is_increase = False
+            if utc_datetime_to_timestamp(self.periods[i - 1].testing_start.date_time) >= utc_datetime_to_timestamp(self.periods[i].testing_start.date_time):
+                is_increase = False
+            if utc_datetime_to_timestamp(self.periods[i - 1].testing_end.date_time) >= utc_datetime_to_timestamp(self.periods[i].testing_end.date_time):
+                is_increase = False
+        if not is_increase:
+            error_messages.append(f"Не все даты в периодах идут по возрастанию от предыдущего к последующему.")
+
+        if len(error_messages) == 0:
+            if utc_datetime_to_timestamp(self.periods[0].learning_start.date_time) <= self.data_sources_start_timestamp:
+                error_messages.append(f"Дата начала периодов раньше первой даты в источниках данных.")
+            if utc_datetime_to_timestamp(self.periods[-1].testing_end.date_time) > self.data_sources_end_timestamp:
+                error_messages.append(f"Дата окончания периодов позже последней даты в источниках данных.")
+
+        if len(error_messages) == 0:
+            for i in range(len(self.periods)):
+                period_start_timestamp = utc_datetime_to_timestamp(self.periods[i].learning_start.date_time)
+                current_datetime_timestamp = None
+                for i_f in range(len(self.data_sources[0])):
+                    is_first_next_date = True
+                    for i_c in range(len(self.data_sources[0][i_f])):
+                        if current_datetime_timestamp is None:
+                            current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+                        else:
+                            if self.data_sources[0][i_f][i_c][0] > current_datetime_timestamp:
+                                current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+                                if current_datetime_timestamp >= period_start_timestamp:
+                                    if is_first_next_date:
+                                        is_first_next_date = False
+                                        if i_c < self.sequence_length - 1:
+                                            error_messages.append(f"i_f={i_f}, количество свечек перед датой периода меньше sequence_length.")
+        if len(error_messages) > 0:
+            for message in error_messages:
+                print(message)
+            raise ValueError(error_messages[0])
+
         for i in range(len(self.periods)):
-            pass
+            self.handle_period(self.periods[i])
+
+
 
     # Нормализует входные последовательности для всех источников данных, а так же выходное значение если оно указано
     # data_sources_inp_seq - последовательности входных данных для всех источников данных
@@ -434,13 +490,13 @@ class DataManager:
         reformatted_data['Close'] = []
         for item in data:
             if len(item) == 1:
-                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Date'].append(timestamp_to_utc_datetime(int(item[0])))
                 reformatted_data['Open'].append(None)
                 reformatted_data['High'].append(None)
                 reformatted_data['Low'].append(None)
                 reformatted_data['Close'].append(None)
             else:
-                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Date'].append(timestamp_to_utc_datetime(int(item[0])))
                 reformatted_data['Open'].append(item[1])
                 reformatted_data['High'].append(item[2])
                 reformatted_data['Low'].append(item[3])
@@ -456,13 +512,13 @@ class DataManager:
         reformatted_data['Close'] = []
         for item in data:
             if len(item) == 1:
-                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Date'].append(timestamp_to_utc_datetime(int(item[0])))
                 reformatted_data['Open'].append(None)
                 reformatted_data['High'].append(None)
                 reformatted_data['Low'].append(None)
                 reformatted_data['Close'].append(None)
             else:
-                reformatted_data['Date'].append(datetime.datetime.fromtimestamp(int(item[0]) / 1000))
+                reformatted_data['Date'].append(timestamp_to_utc_datetime(int(item[0])))
                 reformatted_data['Open'].append(item[1])
                 reformatted_data['High'].append(item[1])
                 reformatted_data['Low'].append(item[1])
