@@ -84,12 +84,21 @@ is_save_predict_data = False # сохранять ли спрогнозиров�
 over_rate = 0 # подставляю это значение в параметр нормализаторов, определяет насколько больше будет диапазон нормализации относительно формата: вплотную, 0.1 - на 10% больше
 data_sources_meta = [
     features.DataSourceMeta(files=[
-            "E:/Моя папка/data/binance/BTCUSDT-1h-2020-01 - 2023-01 lim_0_3000.csv"
+            "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
+            "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
         ], date_index = 0, data_indexes = [1,2,3,4,5], is_save_data=True,
         normalizers=[
             normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
             normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
+    features.DataSourceMeta(files=[
+            "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
+            "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
+        ], date_index = 0, data_indexes = [1,2,3,4,5], is_save_data=True,
+        normalizers=[
+            normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
+            normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
+        ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"])
 ] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных данных, которые нумеруются от 1 до колчества индексов в data_indexes
 
 loaded_models = []
@@ -103,9 +112,9 @@ if is_load_models:
 # генератор создает периоды, начало последующего периода сдвинуто от начала предыдущего на длительность теста предыдущего периода
 is_generate_periods = True # генерировать периоды, или использовать указанные в списке periods
 periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
-periods_generator_start = features.DateTime(year=2020, month=2, day=1)
-periods_generator_learning_duration = features.Duration(years=0, months=0, days=377)
-periods_generator_testing_duration = features.Duration(years=0, months=0, days=377)
+periods_generator_start = features.DateTime(year=2017, month=11, day=1)
+periods_generator_learning_duration = features.Duration(years=0, months=0, days=14)
+periods_generator_testing_duration = features.Duration(years=0, months=0, days=5)
 periods_generator_model_learn_count = 1 # сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
 periods_generator_model_desired_loss = 0 # желаемая ошибка для best_model_criteria, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
 periods_generator_count = 5 # количество периодов

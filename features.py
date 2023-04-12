@@ -7,6 +7,12 @@ import calendar
 import mplfinance as mpf
 import pandas as pd
 import copy
+import normalizers
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from tensorflow.keras.layers import Dense, SimpleRNN, LSTM, GRU, Input
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
 
 # функция возвращает дату в формате UTC+00:00
@@ -138,7 +144,7 @@ class DataManager:
         while os.path.isdir(f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"):
             folder_id += 1
         self.base_folder = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
-        os.makedirs(self.folder_base)
+        os.makedirs(self.base_folder)
         # self.folder_images_learn_predict = f"{self.folder_base}/images/learn_predict"
         # self.folder_images_test_predict = f"{self.folder_base}/images/test_predict"
         # self.folder_images_learn_result = f"{self.folder_base}/images/learn_result"
@@ -222,6 +228,8 @@ class DataManager:
         for i_f in range(len(self.data_sources[0])):
             for i_c in range(len(self.data_sources[0][i_f])):
                 self.data_sources_end_timestamp = self.data_sources[0][i_f][i_c][0]
+
+        self.periods_process()
 
         # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
         # if is_files_fit:
@@ -341,7 +349,11 @@ class DataManager:
 
     # создает входные последовательности, соответствующие им выходные значения и настройки для денормализации, для дат: от начала до окончания периодов
     def create_data_sources_periods_x_y(self):
-        print("Создание входных последовательностей.")
+        print("Создание входных последовательностей")
+        total_count = round((self.periods_end_timestamp - self.periods_start_timestamp) / self.interval_milliseconds)
+        number = 0
+        print(f"     {str(number).ljust(2, '0')}%")
+        number += 5
         # создаю список, заполненный None, размерностью self.data_sources[0]
         self.data_sources_periods = [[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))]
         # доходим до первой свечки начала периодов
@@ -354,10 +366,15 @@ class DataManager:
                 i_f += 1
         current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
         while current_datetime_timestamp <= self.periods_end_timestamp:
-            data_sources_inp_seq = self.get_data_sources_input_sequence(self, i_f, i_c - 1)
+            data_sources_inp_seq = self.get_data_sources_input_sequence(i_f, i_c - 1)
             data_sources_output = self.get_data_sources_output(i_f, i_c)
             x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
             self.data_sources_periods[i_f][i_c] = (x, y, data_sources_normalizers_settings)
+
+
+            if ((current_datetime_timestamp - self.periods_start_timestamp) / self.interval_milliseconds) / total_count >= number / 100:
+                print(f"     {str(number).ljust(2, '0')}%")
+                number += 5
 
             while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
                 i_c += 1
@@ -366,8 +383,8 @@ class DataManager:
                     i_f += 1
             current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
 
-    def get_learning_data(self, datetime_start_timestamp, datetime_end_timestamp):
-        # доходим до первой свечки начала периодов
+    def get_learning_valid_data(self, datetime_start_timestamp, datetime_end_timestamp):
+        # доходим до первой свечки начала периода
         i_f = 0
         i_c = 0
         while self.data_sources[0][i_f][i_c][0] < datetime_start_timestamp:
@@ -395,16 +412,16 @@ class DataManager:
             else:
                 data_type = data_types[1]
 
-            data_sources_inp_seq = self.get_data_sources_input_sequence(self, i_f, i_c - 1)
-            data_sources_output = self.get_data_sources_output(i_f, i_c)
-
-            x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
+            x, y, data_sources_normalizers_settings = self.data_sources_periods[i_f][i_c]
 
             if data_type == data_types[0]:
                 x_learn.append(x)
                 y_learn.append(y)
-
-
+                learn_count += 1
+            else:
+                x_valid.append(x)
+                y_valid.append(y)
+                valid_count += 1
 
             while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
                 i_c += 1
@@ -412,9 +429,54 @@ class DataManager:
                     i_c = 0
                     i_f += 1
             current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+        return (x_learn, y_learn, x_valid, y_valid)
 
     def handle_period(self, period):
-        pass
+        learning_start_timestamp = utc_datetime_to_timestamp(period.learning_start.date_time)
+        learning_end_timestamp = utc_datetime_to_timestamp(period.learning_end.date_time)
+        x_learn, y_learn, x_valid, y_valid = self.get_learning_valid_data(learning_start_timestamp, learning_end_timestamp)
+        print(f"длина обучающей выборки={len(x_learn)}")
+        print(f"длина выборки валидации={len(x_valid)}")
+        if period.model is None:
+            models = []
+            models_losses = []
+            i = 0
+            while True:
+                model = Sequential()
+                model.add(Input((self.sequence_length, len(x_learn[0][0]))))
+                # model.add(LSTM(128, return_sequences=True))
+                model.add(LSTM(128))
+                model.add(Dense(len(y_learn[0]), activation='sigmoid'))
+                model.summary()
+
+                model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
+                # "binary_crossentropy" tf.keras.losses.MeanAbsolutePercentageError()
+
+                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=200, validation_data=(np.array(x_valid), np.array(y_valid)))
+
+                fig_w = 6
+                fig_h = 5
+                plt.figure(figsize=(fig_w, fig_h))
+                plt.title(f"{period.learning_start.date_time.strftime('%Y-%m-%d %Hh %Mm')} - {period.testing_end.date_time.strftime('%Y-%m-%d %Hh %Mm')} [:] _{i + 1}")
+                plt.plot(history.history['loss'])
+                plt.plot(history.history['val_loss'])
+                plt.show()
+                if len(history.history['loss']) > 12:
+                    plt.figure(figsize=(fig_w, fig_h))
+                    plt.title(f"{period.learning_start.date_time.strftime('%Y-%m-%d %Hh %Mm')} - {period.testing_end.date_time.strftime('%Y-%m-%d %Hh %Mm')} [7:] _{i + 1}")
+                    plt.plot(history.history['loss'][7:])
+                    plt.plot(history.history['val_loss'][7:])
+                    plt.show()
+                models.append(model)
+                models_losses.append(history.history['loss'][-1])
+
+                i += 1
+                if history.history['loss'][-1] <= period.model_desired_loss or i >= period.model_learn_count:
+                    break
+            val, idx = min((val, idx) for (idx, val) in enumerate(models_losses))
+            period.model = models[idx]
+
+
 
     def periods_process(self):
         error_messages = []
@@ -465,6 +527,7 @@ class DataManager:
         self.create_data_sources_periods_x_y()
 
         for i in range(len(self.periods)):
+            print(f"Обрабатывается период {i + 1}/{len(self.periods)}")
             self.handle_period(self.periods[i])
 
 
