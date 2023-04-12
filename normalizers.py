@@ -9,7 +9,7 @@ class NormalizerBase:
     def denormalize(self):
         raise NotImplementedError(f"Не переопределен метод un_normalize класса {self.__class__.__name__}")
 
-    """вычисляет минимум и максимум в данных, с начального индекса по конечный, конечный индекс не включается, data_indexes - индексы значений в data_source, для которых будет выполняться нормализация"""
+    # вычисляет минимум и максимум в данных, с начального индекса по конечный, конечный индекс не включается, data_indexes - индексы значений в data_source, для которых будет выполняться нормализация
     @classmethod
     def min_max_data(cls, data, start_index, end_index, data_indexes):
         min_data = None
@@ -35,7 +35,85 @@ class MinMaxScalerBase:
     def un_min_max_scaler(cls, min_val, max_val, val):
         return val * (max_val - min_val) + min_val
 
-"""RelativeMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max"""
+# нормализует данные в диапазоне от минимума до максимума, которые были в источнике данных, до данных нормализации
+class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
+    # add_values - значения, которые будут с самого начала учитываться в диапазоне нормализации
+    def __init__(self, data_indexes, output_weight, over_rate_low, over_rate_high, **kwargs):
+        self.data_indexes = data_indexes
+        self.output_weight = output_weight
+        self.over_rate_low = over_rate_low
+        self.over_rate_high = over_rate_high
+        if "add_values" in kwargs:
+            if len(kwargs["add_values"]) > 0:
+                self.add_values = kwargs["add_values"]
+
+    def summary(self, data_source, sequence_length):
+        self.sequence_length = sequence_length
+        self.data_source_settings = [[None] * len(data_source[i_f]) for i_f in range(len(data_source))]
+        range_min = min([data_source[0][0][data_index] for data_index in self.data_indexes])
+        range_max = max([data_source[0][0][data_index] for data_index in self.data_indexes])
+        if hasattr(self, "add_values"):
+            range_min = min(range_min, min(self.add_values))
+            range_max = max(range_max, max(self.add_values))
+        for i_f in range(len(data_source)):
+            for i_c in range(len(data_source[i_f])):
+                range_min = min(range_min, min([data_source[i_f][i_c][data_index] for data_index in self.data_indexes]))
+                range_max = max(range_max, max([data_source[i_f][i_c][data_index] for data_index in self.data_indexes]))
+                n_setting = NormalizeSetting()
+                n_setting.range_min = range_min
+                n_setting.range_max = range_max
+                self.data_source_settings[i_f][i_c] = n_setting
+
+    def normalize(self, inp_sequence, output=None, **kwargs):
+        range_min = self.data_source_settings[kwargs["i_f"]][kwargs["i_c"]].range_min
+        range_max = self.data_source_settings[kwargs["i_f"]][kwargs["i_c"]].range_max
+        if "add_candles" in kwargs:
+            add_range_min = min([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
+            add_range_max = max([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
+            for i in range(len(kwargs["add_candles"])):
+                add_range_min = min(add_range_min, min([kwargs["add_candles"][i][data_index] for data_index in self.data_indexes]))
+                add_range_max = max(add_range_max, max([kwargs["add_candles"][i][data_index] for data_index in self.data_indexes]))
+            range_min = min(range_min, add_range_min)
+            range_max = max(range_max, add_range_max)
+        range_min_max = range_max - range_min
+        range_min_over_rated = range_min - range_min_max * self.over_rate_low
+        range_max_over_rated = range_max + range_min_max * self.over_rate_high
+
+        normalized_inp_sequence = []
+        for i in range(len(inp_sequence)):
+            input = []
+            for dat_ind in self.data_indexes:
+                input.append(self.min_max_scaler(range_min_over_rated, range_max_over_rated, inp_sequence[i][dat_ind]))
+            normalized_inp_sequence.append(input)
+
+        normalized_output = []
+        if output != None:
+            for dat_ind in self.data_indexes:
+                normalized_output.append(self.min_max_scaler(range_min_over_rated, range_max_over_rated, output[dat_ind]))
+
+        n_setting = NormalizeSetting()
+        n_setting.range_min_over_rated = range_min_over_rated
+        n_setting.range_max_over_rated = range_max_over_rated
+
+        return normalized_inp_sequence, normalized_output, n_setting
+
+    def denormalize(self, norm_setting, normalized_inp_sequence = None, normalized_output = None, **kwargs):
+        denormalized_inp_sequence = []
+        if normalized_inp_sequence != None:
+            for i in range(len(normalized_inp_sequence)):
+                input = []
+                for index in range(len(self.data_indexes)):
+                    input.append(self.un_min_max_scaler(norm_setting.range_min_over_rated, norm_setting.range_max_over_rated, normalized_inp_sequence[i][index]))
+                denormalized_inp_sequence.append(input)
+
+        denormalized_output = []
+        if normalized_output != None:
+            for index in range(len(self.data_indexes)):
+                denormalized_output.append(self.un_min_max_scaler(norm_setting.range_min_over_rated, norm_setting.range_max_over_rated, normalized_output[index]))
+
+        return denormalized_inp_sequence, denormalized_output
+
+# RelativeMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max
 class RelativeMinMaxScaler(NormalizerBase, MinMaxScalerBase):
     # data_indexes - индексы значений в data_source, для которых будет выполняться нормализация
     # over_rate - часть от увеличения диапазона под выходное значение, на которую диапазон для нормализации будет больше. 0.1 - увеличение диапазона будет на 10% больше

@@ -71,7 +71,7 @@ from tensorflow.keras.optimizers import Adam
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 validation_split = 0.05 # размер данных для валидации относительно всех данных
-sequence_length = 300 # длина последовательных данных для которых делается прогноз следующего значения
+sequence_length = 100 # длина последовательных данных для которых делается прогноз следующего значения
 predict_length = 48 # количество шагов на которое будут спрогнозированы данные
 part_learn_predict = 0.01 # часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_test_predict = 0.1 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
@@ -81,23 +81,23 @@ is_visualize_prediction_union = True # визуализировать спрог
 is_visualize_prediction_single = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Каждый источник данных будет на собственном изображении.
 visualize_prediction_cut = 400 # до какой длины обрезать визуализируемые данные. Чтобы если длина последовательности и длина предсказания большие, можно было понять как предсказание корелирует с истинными данными. Независимо от данного значения, визуализированы будут все данные предсказания.
 is_save_predict_data = False # сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
-over_rate = 0 # подставляю это значение в параметр нормализаторов, определяет насколько больше будет диапазон нормализации относительно формата: вплотную, 0.1 - на 10% больше
+over_rate = 0.2 # подставляю это значение в параметр нормализаторов, определяет насколько больше будет диапазон нормализации относительно формата: вплотную, 0.1 - на 10% больше
 data_sources_meta = [
     features.DataSourceMeta(files=[
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
         ], date_index = 0, data_indexes = [1,2,3,4,5], is_save_data=True,
         normalizers=[
-            normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
-            normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1,2,3,4], output_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[]),
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[5], output_weight=1, over_rate_low=0.05, over_rate_high=over_rate, add_values=[0])
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
     features.DataSourceMeta(files=[
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
         ], date_index = 0, data_indexes = [1,2,3,4,5], is_save_data=True,
         normalizers=[
-            normalizers.RelativeMinMaxScaler(data_indexes=[1,2,3,4], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate),
-            normalizers.RelativeMinMaxScaler(data_indexes=[5], is_range_part=True, is_high_part=True, is_low_part=True, over_rate=over_rate)
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1, 2, 3, 4], output_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[]),
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[5], output_weight=1, over_rate_low=0.05, over_rate_high=over_rate, add_values=[0])
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"])
 ] # data_indexes - индексы данных в файле. Индексы данных для визуализации в visualize это индексы данных от 1 до количества элементов в data_indexes, то есть данные, полученные из файла по таким индексам: data_indexes=[2,3,5,6] отображаются с использование таких индексов: visualize=[("candle", [1,2,3,4]), т.к. в visualize указываются не индексы данных в файле, а индексы уже считанных данных, которые нумеруются от 1 до колчества индексов в data_indexes
 
@@ -112,7 +112,7 @@ if is_load_models:
 # генератор создает периоды, начало последующего периода сдвинуто от начала предыдущего на длительность теста предыдущего периода
 is_generate_periods = True # генерировать периоды, или использовать указанные в списке periods
 periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
-periods_generator_start = features.DateTime(year=2017, month=11, day=1)
+periods_generator_start = features.DateTime(year=2017, month=10, day=18)
 periods_generator_learning_duration = features.Duration(years=0, months=0, days=14)
 periods_generator_testing_duration = features.Duration(years=0, months=0, days=5)
 periods_generator_model_learn_count = 1 # сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой

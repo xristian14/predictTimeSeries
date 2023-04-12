@@ -1,3 +1,4 @@
+import sys
 import time
 import random
 import os
@@ -229,108 +230,12 @@ class DataManager:
             for i_c in range(len(self.data_sources[0][i_f])):
                 self.data_sources_end_timestamp = self.data_sources[0][i_f][i_c][0]
 
+        # выполняем подготовку нормализаторов
+        for i_ds in range(len(data_sources_meta)):
+            for i_n in range(len(data_sources_meta[i_ds].normalizers)):
+                data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources[i_ds], self.sequence_length)
+
         self.periods_process()
-
-        # если не было ошибок, опредлеяем типы данных для всех свечек, и формируем: обучающие, валидационные и тестовые данные
-        # if is_files_fit:
-        #     self.data_interval = self.data_sources[0][0][1][0] - self.data_sources[0][0][0][0]
-        #     if len(self.data_sources[0][0]) > 9:
-        #         for i in range(9):
-        #             if self.data_sources[0][0][i + 1][0] - self.data_sources[0][0][i][0] != self.data_interval:
-        #                 raise ValueError("При определении временного интервала данных, в первых 10 данных обнаружены разные временные интервалы.")
-        #     else:
-        #         raise ValueError("Количество данных в файле должно быть не менее 10.")
-        #     # опредлеяем типы данных для всех свечек
-        #     self.data_sources_data_type = []  # тип данных для всех данных для всех файлов: [0(обучающие), 1(валидационные), 2(тестовые), -1(не участвует в выборках)]. Нет разделения на источники данных, т.к. тип данных относится ко всем источникам данных
-        #     learn_count = 0
-        #     valid_count = 0
-        #     test_count = 0
-        #     sequence_number = 0
-        #     data_types = [0, 1, 2]
-        #     data_type = data_types[random.randint(0, 2)]
-        #     last_file_date = None
-        #     for i_f in range(len(self.data_sources[0])):
-        #         file_data_types = []
-        #         for i_c in range(len(self.data_sources[0][i_f])):
-        #             is_next_date = False
-        #             if last_file_date != None:
-        #                 if self.data_sources[0][i_f][i_c][0] > last_file_date:
-        #                     is_next_date = True
-        #                     last_file_date = self.data_sources[0][i_f][i_c][0]
-        #             else:
-        #                 last_file_date = self.data_sources[0][i_f][i_c][0]
-        #                 is_next_date = True
-        #
-        #             if sequence_number >= data_split_sequence_length:
-        #                 sequence_number = 0
-        #                 # выбираем случайный тип среди тех, которые составляют от всех данных меньшую часть чем указано для них, если ни один из типов не является меньше указанного, выбираем случайный тип
-        #                 data_types_less_than_split = []  # типы данных, количество которых меньше чем их указанное в настройках количество
-        #                 if learn_count / (learn_count + valid_count + test_count) < 1 - (validation_split + test_split):
-        #                     data_types_less_than_split.append(data_types[0])
-        #                 if valid_count / (learn_count + valid_count + test_count) < validation_split:
-        #                     data_types_less_than_split.append(data_types[1])
-        #                 if test_count / (learn_count + valid_count + test_count) < test_split:
-        #                     data_types_less_than_split.append(data_types[2])
-        #
-        #                 if len(data_types_less_than_split) > 0:
-        #                     data_type = random.choice(data_types_less_than_split)
-        #                 else:
-        #                     data_type = data_types[random.randint(0, 2)]
-        #
-        #             if i_c >= sequence_length and (i_c >= first_file_offset if i_f == 0 else True) and is_next_date:
-        #                 file_data_types.append(data_type)
-        #                 if data_type == data_types[0]:
-        #                     learn_count += 1
-        #                 elif data_type == data_types[1]:
-        #                     valid_count += 1
-        #                 else:
-        #                     test_count += 1
-        #                 sequence_number += 1
-        #             else:
-        #                 file_data_types.append(-1)  # если перед свечкой нет последовательности длиной sequence_length или это первый файл и мы не отошли от начала на first_file_offset или текущая свечка не является следующей за последней датой, отмечаем что она не относится ни к одной выборке
-        #         self.data_sources_data_type.append(file_data_types)
-        #
-        #     # выполняем подготовку нормализаторов
-        #     for i_ds in range(len(data_sources_meta)):
-        #         for i_n in range(len(data_sources_meta[i_ds].normalizers)):
-        #             data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources[i_ds], self.data_sources_data_type, self.sequence_length)
-        #
-        #     # формируем обучающие, валидационные и тестовые данные
-        #     self.x_learn = []
-        #     self.y_learn = []
-        #     self.x_valid = []
-        #     self.y_valid = []
-        #     self.x_test = []
-        #     self.y_test = []
-        #     for i_f in range(len(self.data_sources_data_type)):
-        #         for i_c in range(len(self.data_sources_data_type[i_f])):
-        #             if self.data_sources_data_type[i_f][i_c] != -1:
-        #
-        #                 data_sources_inp_seq = []
-        #                 for i_ds in range(len(self.data_sources)):
-        #                     data_source_inp_seq = []
-        #                     for i_seq in range(i_c - self.sequence_length, i_c):  # проходим по всем свечкам входной последовательности
-        #                         data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
-        #                     data_sources_inp_seq.append(data_source_inp_seq)
-        #
-        #                 data_sources_output = []
-        #                 for i_ds in range(len(self.data_sources)):
-        #                     data_sources_output.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_c]))
-        #
-        #                 x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
-        #                 if self.data_sources_data_type[i_f][i_c] == 0:
-        #                     self.x_learn.append(x)
-        #                     self.y_learn.append(y)
-        #                 elif self.data_sources_data_type[i_f][i_c] == 1:
-        #                     self.x_valid.append(x)
-        #                     self.y_valid.append(y)
-        #                 elif self.data_sources_data_type[i_f][i_c] == 2:
-        #                     self.x_test.append(x)
-        #                     self.y_test.append(y)
-        # else:
-        #     raise ValueError(error_messages[0])
-
-    # создает для всех данных источников данных в рамках периодов нормализованные входные последовательности, и выход для учебных данных
 
     def get_data_sources_input_sequence(self, i_f, i_last_input_candle):
         data_sources_inp_seq = []
@@ -349,13 +254,12 @@ class DataManager:
 
     # создает входные последовательности, соответствующие им выходные значения и настройки для денормализации, для дат: от начала до окончания периодов
     def create_data_sources_periods_x_y(self):
-        print("Создание входных последовательностей")
         total_count = round((self.periods_end_timestamp - self.periods_start_timestamp) / self.interval_milliseconds)
         number = 0
-        print(f"     {str(number).ljust(2, '0')}%")
+        print(f"Создание входных последовательностей: {number}%")
         number += 5
         # создаю список, заполненный None, размерностью self.data_sources[0]
-        self.data_sources_periods = [[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))]
+        self.data_sources_periods_x_y = [[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))]
         # доходим до первой свечки начала периодов
         i_f = 0
         i_c = 0
@@ -368,12 +272,11 @@ class DataManager:
         while current_datetime_timestamp <= self.periods_end_timestamp:
             data_sources_inp_seq = self.get_data_sources_input_sequence(i_f, i_c - 1)
             data_sources_output = self.get_data_sources_output(i_f, i_c)
-            x, y, data_sources_normalizers_settings = self.normalize_data_sources(data_sources_inp_seq, data_sources_output)
-            self.data_sources_periods[i_f][i_c] = (x, y, data_sources_normalizers_settings)
-
+            x, y, data_sources_normalizers_settings = self.normalize_data_sources(i_f, i_c - 1, data_sources_inp_seq, data_sources_output)
+            self.data_sources_periods_x_y[i_f][i_c] = (x, y, data_sources_normalizers_settings)
 
             if ((current_datetime_timestamp - self.periods_start_timestamp) / self.interval_milliseconds) / total_count >= number / 100:
-                print(f"     {str(number).ljust(2, '0')}%")
+                print(f"Создание входных последовательностей: {number}%")
                 number += 5
 
             while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
@@ -535,7 +438,7 @@ class DataManager:
     # Нормализует входные последовательности для всех источников данных, а так же выходное значение если оно указано
     # data_sources_inp_seq - последовательности входных данных для всех источников данных
     # возвращает последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации вида: settings[i_ds][i_normalize].
-    def normalize_data_sources(self, data_sources_inp_seq, data_sources_output=None):
+    def normalize_data_sources(self, i_f, i_c, data_sources_inp_seq, data_sources_output=None):
         data_sources_normalizers_inp_seq = []
         data_sources_normalizers_out = []
         data_sources_normalizers_settings = []
@@ -545,7 +448,7 @@ class DataManager:
             normalizers_out = []
             normalizers_settings = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds] if data_sources_output != None else None)
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds], i_f=i_f, i_c=i_c)
                 normalizers_inp_seq.append(x)
                 normalizers_out.append(y)
                 normalizers_settings.append(n_setting)
