@@ -38,21 +38,58 @@ class MinMaxScalerBase:
 # нормализует данные в диапазоне от минимума до максимума, которые были в источнике данных, до данных нормализации
 class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
     # add_values - значения, которые будут с самого начала учитываться в диапазоне нормализации
-    def __init__(self, data_indexes, output_weight, over_rate_low, over_rate_high, **kwargs):
+    def __init__(self, data_indexes, output_weight, over_rate_low, over_rate_high, add_values, is_auto_over_rate_low=False, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=False, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1):
         self.data_indexes = data_indexes
         self.output_weight = output_weight
         self.over_rate_low = over_rate_low
         self.over_rate_high = over_rate_high
-        if "add_values" in kwargs:
-            if len(kwargs["add_values"]) > 0:
-                self.add_values = kwargs["add_values"]
+        self.add_values = add_values
+        self.is_auto_over_rate_low = is_auto_over_rate_low
+        self.auto_over_rate_low_multipy = auto_over_rate_low_multipy
+        self.auto_over_rate_low_min = auto_over_rate_low_min # минимальное значение для over_rate_low при автоматическом определении
+        self.is_auto_over_rate_high = is_auto_over_rate_high
+        self.auto_over_rate_high_multipy = auto_over_rate_high_multipy
+        self.auto_over_rate_high_min = auto_over_rate_high_min # минимальное значение для over_rate_high при автоматическом определении
 
     def summary(self, data_source, sequence_length):
+        # автоматически определяем over_rate_low и over_rate_high
+        if self.is_auto_over_rate_low or self.is_auto_over_rate_high:
+            over_rate_low = 0
+            over_rate_high = 0
+            range_min = min([data_source[0][0][data_index] for data_index in self.data_indexes])
+            range_max = max([data_source[0][0][data_index] for data_index in self.data_indexes])
+            if len(self.add_values) > 0:
+                range_min = min(range_min, min(self.add_values))
+                range_max = max(range_max, max(self.add_values))
+            for i_f in range(len(data_source)):
+                for i_c in range(len(data_source[i_f])):
+                    current_min = min(range_min, min([data_source[i_f][i_c][data_index] for data_index in self.data_indexes]))
+                    current_max = max(range_max, max([data_source[i_f][i_c][data_index] for data_index in self.data_indexes]))
+                    range_min_max = range_max - range_min
+                    if current_min < range_min:
+                        current_over_rate_low = (range_min - current_min) / range_min_max
+                        if current_over_rate_low > over_rate_low:
+                            over_rate_low = current_over_rate_low
+                        range_min = current_min
+                    if current_max > range_max:
+                        current_over_rate_high = (current_max - range_max) / range_min_max
+                        if current_over_rate_high > over_rate_high:
+                            over_rate_high = current_over_rate_high
+                        range_max = current_max
+
+            over_rate_low_multiplied = over_rate_low * self.auto_over_rate_low_multipy
+            over_rate_high_multiplied = over_rate_high * self.auto_over_rate_high_multipy
+
+            if self.is_auto_over_rate_low:
+                self.over_rate_low = max(self.auto_over_rate_low_min, over_rate_low_multiplied)
+            if self.is_auto_over_rate_high:
+                self.over_rate_high = max(self.auto_over_rate_high_min, over_rate_high_multiplied)
+
         self.sequence_length = sequence_length
         self.data_source_settings = [[None] * len(data_source[i_f]) for i_f in range(len(data_source))]
         range_min = min([data_source[0][0][data_index] for data_index in self.data_indexes])
         range_max = max([data_source[0][0][data_index] for data_index in self.data_indexes])
-        if hasattr(self, "add_values"):
+        if len(self.add_values) > 0:
             range_min = min(range_min, min(self.add_values))
             range_max = max(range_max, max(self.add_values))
         for i_f in range(len(data_source)):
