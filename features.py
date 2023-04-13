@@ -471,6 +471,8 @@ class DataManager:
                 for i_n in range(len(data_sources_normalizers_out[i_ds])):
                     finally_out_seq.extend(data_sources_normalizers_out[i_ds][i_n])
 
+        self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings, finally_inp_seq, finally_out_seq)
+
         return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
 
     # Денормализует входные последовательности для всех нормализаторов, всех источников данных, а так же выходное значение если оно указано
@@ -518,9 +520,9 @@ class DataManager:
             data_source_normalizers = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
                 data_source_normalizer = []
-                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length):
+                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length):
                     data_source_normalizer.append(copy.deepcopy(output[i]))
-                index += self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length
+                index += self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length
                 data_source_normalizers.append(data_source_normalizer)
             output_data_sources_normalizers.append(data_source_normalizers)
         return output_data_sources_normalizers
@@ -532,9 +534,9 @@ class DataManager:
             data_source_normalizers = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
                 data_source_normalizer = []
-                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].out_norm_data_length):
+                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length):
                     data_source_normalizer.append(copy.deepcopy(input[i]))
-                index += self.data_sources_meta[i_ds].normalizers[i_n].inp_norm_data_length
+                index += self.data_sources_meta[i_ds].normalizers[i_n].normalize_input_length
                 data_source_normalizers.append(data_source_normalizer)
             input_data_sources_normalizers.append(data_source_normalizers)
         return input_data_sources_normalizers

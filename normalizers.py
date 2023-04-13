@@ -1,3 +1,6 @@
+import features
+
+
 class NormalizeSetting:
     pass
 
@@ -35,12 +38,73 @@ class MinMaxScalerBase:
     def un_min_max_scaler(cls, min_val, max_val, val):
         return val * (max_val - min_val) + min_val
 
+class DateTimeOneHotVector(NormalizerBase):
+    def __init__(self, data_indexes, is_input_denormalize, input_denormalize_weight, is_output_denormalize, output_denormalize_weight, is_month, is_day, is_hour):
+        self.data_indexes = data_indexes
+        self.is_input_denormalize = is_input_denormalize
+        self.input_denormalize_weight = input_denormalize_weight
+        self.is_output_denormalize = is_output_denormalize
+        self.output_denormalize_weight = output_denormalize_weight
+        self.is_month = is_month
+        self.is_day = is_day
+        self.is_hour = is_hour
+        if not is_month and not is_day and not is_hour:
+            raise ValueError("В нормализаторе DateTimeOneHotVector не указан ни месяц, ни день, ни час.")
+        self.normalize_input_length = is_month * 12 + is_day * 31 + is_hour * 24
+        self.denormalize_input_length = 0
+        self.normalize_output_length = 0
+        self.denormalize_output_length = 0
+
+    def summary(self, data_source, sequence_length):
+        self.sequence_length = sequence_length
+        self.months_list = [1,2,3,4,5,6,7,8,9,10,11,12]
+        self.days_list = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]
+        self.hours_list = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+
+    def normalize(self, inp_sequence, output=None, **kwargs):
+        normalized_inp_sequence_by_data_indexes = []
+        for i in range(len(inp_sequence)):
+            input = []
+            for dat_ind in self.data_indexes:
+                date = features.timestamp_to_utc_datetime(inp_sequence[i][dat_ind])
+                if self.is_month:
+                    month_index = self.months_list.index(date.month)
+                    input.extend([0] * month_index)
+                    input.extend([1])
+                    input.extend([0] * (len(self.months_list) - (month_index + 1)))
+                if self.is_day:
+                    day_index = self.days_list.index(date.day)
+                    input.extend([0] * day_index)
+                    input.extend([1])
+                    input.extend([0] * (len(self.days_list) - (day_index + 1)))
+                if self.is_hour:
+                    hour_index = self.hours_list.index(date.hour)
+                    input.extend([0] * hour_index)
+                    input.extend([1])
+                    input.extend([0] * (len(self.hours_list) - (hour_index + 1)))
+            normalized_inp_sequence_by_data_indexes.append(input)
+
+        normalized_output_by_data_indexes = []
+
+        n_setting = NormalizeSetting()
+
+        return normalized_inp_sequence_by_data_indexes, normalized_output_by_data_indexes, n_setting
+
+    def denormalize(self, norm_setting, normalized_inp_sequence_by_data_indexes = None, normalized_output_by_data_indexes = None, **kwargs):
+        denormalized_inp_sequence_by_data_indexes = []
+        denormalized_output_by_data_indexes = []
+
+        return denormalized_inp_sequence_by_data_indexes, denormalized_output_by_data_indexes
+
 # нормализует данные в диапазоне от минимума до максимума, которые были в источнике данных, до данных нормализации
 class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
     # add_values - значения, которые будут с самого начала учитываться в диапазоне нормализации
-    def __init__(self, data_indexes, output_weight, over_rate_low, over_rate_high, add_values, is_auto_over_rate_low=False, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=False, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1):
+    def __init__(self, data_indexes, is_input_denormalize, input_denormalize_weight, is_output_denormalize, output_denormalize_weight, over_rate_low, over_rate_high, add_values, is_auto_over_rate_low=False, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=False, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1):
         self.data_indexes = data_indexes
-        self.output_weight = output_weight
+        self.is_input_denormalize = is_input_denormalize
+        self.input_denormalize_weight = input_denormalize_weight
+        self.is_output_denormalize = is_output_denormalize
+        self.output_denormalize_weight = output_denormalize_weight
         self.over_rate_low = over_rate_low
         self.over_rate_high = over_rate_high
         self.add_values = add_values
@@ -50,6 +114,10 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         self.is_auto_over_rate_high = is_auto_over_rate_high
         self.auto_over_rate_high_multipy = auto_over_rate_high_multipy
         self.auto_over_rate_high_min = auto_over_rate_high_min # минимальное значение для over_rate_high при автоматическом определении
+        self.normalize_input_length = len(data_indexes)
+        self.denormalize_input_length = len(data_indexes)
+        self.normalize_output_length = len(data_indexes)
+        self.denormalize_output_length = len(data_indexes)
 
     def summary(self, data_source, sequence_length):
         # автоматически определяем over_rate_low и over_rate_high
@@ -116,39 +184,39 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         range_min_over_rated = range_min - range_min_max * self.over_rate_low
         range_max_over_rated = range_max + range_min_max * self.over_rate_high
 
-        normalized_inp_sequence = []
+        normalized_inp_sequence_by_data_indexes = []
         for i in range(len(inp_sequence)):
             input = []
             for dat_ind in self.data_indexes:
                 input.append(self.min_max_scaler(range_min_over_rated, range_max_over_rated, inp_sequence[i][dat_ind]))
-            normalized_inp_sequence.append(input)
+            normalized_inp_sequence_by_data_indexes.append(input)
 
-        normalized_output = []
+        normalized_output_by_data_indexes = []
         if output != None:
             for dat_ind in self.data_indexes:
-                normalized_output.append(self.min_max_scaler(range_min_over_rated, range_max_over_rated, output[dat_ind]))
+                normalized_output_by_data_indexes.append(self.min_max_scaler(range_min_over_rated, range_max_over_rated, output[dat_ind]))
 
         n_setting = NormalizeSetting()
         n_setting.range_min_over_rated = range_min_over_rated
         n_setting.range_max_over_rated = range_max_over_rated
 
-        return normalized_inp_sequence, normalized_output, n_setting
+        return normalized_inp_sequence_by_data_indexes, normalized_output_by_data_indexes, n_setting
 
-    def denormalize(self, norm_setting, normalized_inp_sequence = None, normalized_output = None, **kwargs):
-        denormalized_inp_sequence = []
-        if normalized_inp_sequence != None:
-            for i in range(len(normalized_inp_sequence)):
+    def denormalize(self, norm_setting, normalized_inp_sequence_by_data_indexes = None, normalized_output_by_data_indexes = None, **kwargs):
+        denormalized_inp_sequence_by_data_indexes = []
+        if normalized_inp_sequence_by_data_indexes != None:
+            for i in range(len(normalized_inp_sequence_by_data_indexes)):
                 input = []
-                for index in range(len(self.data_indexes)):
-                    input.append(self.un_min_max_scaler(norm_setting.range_min_over_rated, norm_setting.range_max_over_rated, normalized_inp_sequence[i][index]))
-                denormalized_inp_sequence.append(input)
+                for index in range(len(normalized_inp_sequence_by_data_indexes[0])):
+                    input.append(self.un_min_max_scaler(norm_setting.range_min_over_rated, norm_setting.range_max_over_rated, normalized_inp_sequence_by_data_indexes[i][index]))
+                denormalized_inp_sequence_by_data_indexes.append(input)
 
-        denormalized_output = []
-        if normalized_output != None:
-            for index in range(len(self.data_indexes)):
-                denormalized_output.append(self.un_min_max_scaler(norm_setting.range_min_over_rated, norm_setting.range_max_over_rated, normalized_output[index]))
+        denormalized_output_by_data_indexes = []
+        if normalized_output_by_data_indexes != None:
+            for index in range(len(normalized_output_by_data_indexes)):
+                denormalized_output_by_data_indexes.append(self.un_min_max_scaler(norm_setting.range_min_over_rated, norm_setting.range_max_over_rated, normalized_output_by_data_indexes[index]))
 
-        return denormalized_inp_sequence, denormalized_output
+        return denormalized_inp_sequence_by_data_indexes, denormalized_output_by_data_indexes
 
 # RelativeMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max
 class RelativeMinMaxScaler(NormalizerBase, MinMaxScalerBase):
