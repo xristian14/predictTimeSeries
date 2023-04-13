@@ -54,6 +54,9 @@ class DateTimeOneHotVector(NormalizerBase):
         self.denormalize_input_length = 0
         self.normalize_output_length = 0
         self.denormalize_output_length = 0
+        self.data_indexes_offsets = {}  # смещение во входных нормализованных данных для каждого индекса данных. С помощью этого списка можно понять по какому смещению получить значение определенного индекса данных из нормализованных данных
+        for i in range(len(data_indexes)):
+            self.data_indexes_offsets[data_indexes[i]] = i
 
     def summary(self, data_source, sequence_length):
         self.sequence_length = sequence_length
@@ -118,6 +121,9 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         self.denormalize_input_length = len(data_indexes)
         self.normalize_output_length = len(data_indexes)
         self.denormalize_output_length = len(data_indexes)
+        self.data_indexes_offsets = {} # смещение во входных нормализованных данных для каждого индекса данных. С помощью этого списка можно понять по какому смещению получить значение определенного индекса данных из нормализованных данных
+        for i in range(len(data_indexes)):
+            self.data_indexes_offsets[data_indexes[i]] = i
 
     def summary(self, data_source, sequence_length):
         # автоматически определяем over_rate_low и over_rate_high

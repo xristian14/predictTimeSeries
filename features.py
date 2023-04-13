@@ -488,22 +488,67 @@ class DataManager:
             data_sources_normalizers_input_sequence_denorm.append(normalizers_input_sequence_denorm)
             data_sources_normalizers_output_denorm.append(normalizers_output_denorm)
 
+        # определяю все индексы данных, используемые в нормализаторах источниках данных
+        data_sources_normalizers_data_indexes = []
+        for i_ds in range(len(self.data_sources_meta)):
+            normalizers_data_indexes = []
+            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                for data_index in self.data_sources_meta[i_ds].normalizers[i_n].data_indexes:
+                    if not data_index in normalizers_data_indexes:
+                        normalizers_data_indexes.append(data_index)
+            data_sources_normalizers_data_indexes.append(sorted(normalizers_data_indexes))
+
         data_sources_input_sequence_denorm = [] # перевод из фомата data_sources_normalizers_input_sequence_denorm[i_ds][i_n][i_c] в формат data_sources_input_sequence_denorm[i_ds][i_c]
         for i_ds in range(len(data_sources_normalizers_input_sequence_denorm)):
             input_sequence_denorm = []
             for i_seq in range(max([len(data_sources_normalizers_input_sequence_denorm[i_ds][n]) for n in range(len(data_sources_normalizers_input_sequence_denorm[i_ds]))])):
                 input_denorm = []
-                for i_n in range(len(data_sources_normalizers_input_sequence_denorm[i_ds])):
-                    if len(data_sources_normalizers_input_sequence_denorm[i_ds][i_n]) > 0:
-                        input_denorm.extend(data_sources_normalizers_input_sequence_denorm[i_ds][i_n][i_seq])
+                # проходим по индексам данных у нормализаторов данного источника данных
+                for data_index in data_sources_normalizers_data_indexes[i_ds]:
+                    # находим индексы всех нормализаторов, у которых используется данный индекс данных, и у которых указано что нужно денормализовывать входные данные
+                    data_index_normalizers_indexes = []
+                    for i_n in range(len(data_sources_normalizers_input_sequence_denorm[i_ds])):
+                        if data_index in self.data_sources_meta[i_ds].normalizers[i_n].data_indexes and self.data_sources_meta[i_ds].normalizers[i_n].is_input_denormalize:
+                            data_index_normalizers_indexes.append(i_n)
+                    # если есть нормализаторы, у которых указано что нужно денормализовывать входные данные, формируем для них пары: денормализованное значение и вес входной денормализации
+                    data_index_values_weights = []
+                    if len(data_index_normalizers_indexes) > 0:
+                        for i_n in data_index_normalizers_indexes:
+                            data_index_values_weights.append((data_sources_normalizers_input_sequence_denorm[i_ds][i_n][i_seq][self.data_sources_meta[i_ds].normalizers[i_n].data_indexes_offsets[data_index]], self.data_sources_meta[i_ds].normalizers[i_n].input_denormalize_weight))
+                    if len(data_index_values_weights) > 0:
+                        weighted_values_sum = sum([data_index_values_weights[k][0] * data_index_values_weights[k][1] for k in range(len(data_index_values_weights))])
+                        weights_sum = sum([data_index_values_weights[k][1] for k in range(len(data_index_values_weights))])
+                        if weights_sum > 0:
+                            input_denorm.append(weighted_values_sum / weights_sum)
+                        else:
+                            input_denorm.append(0)
                 input_sequence_denorm.append(input_denorm)
             data_sources_input_sequence_denorm.append(input_sequence_denorm)
 
         data_sources_output_denorm = [] # перевод из фомата data_sources_normalizers_output_denorm[i_ds][i_n] в формат data_sources_output_denorm[i_ds]
         for i_ds in range(len(data_sources_normalizers_output_denorm)):
             output_denorm = []
-            for i_n in range(len(data_sources_normalizers_output_denorm[i_ds])):
-                output_denorm.extend(data_sources_normalizers_output_denorm[i_ds][i_n])
+            # проходим по индексам данных у нормализаторов данного источника данных
+            for data_index in data_sources_normalizers_data_indexes[i_ds]:
+                # находим индексы всех нормализаторов, у которых используется данный индекс данных, и у которых указано что нужно денормализовывать выходные данные
+                data_index_normalizers_indexes = []
+                for i_n in range(len(data_sources_normalizers_output_denorm[i_ds])):
+                    if data_index in self.data_sources_meta[i_ds].normalizers[i_n].data_indexes and self.data_sources_meta[i_ds].normalizers[i_n].is_output_denormalize:
+                        data_index_normalizers_indexes.append(i_n)
+                # если есть нормализаторы, у которых указано что нужно денормализовывать выходные данные, формируем для них пары: денормализованное значение и вес выходной денормализации
+                data_index_values_weights = []
+                if len(data_index_normalizers_indexes) > 0:
+                    for i_n in data_index_normalizers_indexes:
+                        data_index_values_weights.append((data_sources_normalizers_output_denorm[i_ds][i_n][self.data_sources_meta[i_ds].normalizers[i_n].data_indexes_offsets[data_index]], self.data_sources_meta[i_ds].normalizers[i_n].output_denormalize_weight))
+                if len(data_index_values_weights) > 0:
+                    weighted_values_sum = sum(
+                        [data_index_values_weights[k][0] * data_index_values_weights[k][1] for k in
+                         range(len(data_index_values_weights))])
+                    weights_sum = sum([data_index_values_weights[k][1] for k in range(len(data_index_values_weights))])
+                    if weights_sum > 0:
+                        output_denorm.append(weighted_values_sum / weights_sum)
+                    else:
+                        output_denorm.append(0)
             data_sources_output_denorm.append(output_denorm)
 
         return data_sources_input_sequence_denorm, data_sources_output_denorm

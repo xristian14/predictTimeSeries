@@ -90,7 +90,7 @@ data_sources_meta = [
         normalizers=[
             normalizers.DateTimeOneHotVector(data_indexes=[0], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1, is_month=False, is_day=False, is_hour=True),
             normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1,2,3,4], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[2416], is_auto_over_rate_low=True, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
-            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[5], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=0.05, over_rate_high=over_rate, add_values=[0], is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1)
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[5], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=0.05, over_rate_high=over_rate, add_values=[-100], is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1)
         ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
     features.DataSourceMeta(files=[
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
