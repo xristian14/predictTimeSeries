@@ -433,11 +433,7 @@ class DataManager:
             print(f"Обрабатывается период {i + 1}/{len(self.periods)}")
             self.handle_period(self.periods[i])
 
-
-
-    # Нормализует входные последовательности для всех источников данных, а так же выходное значение если оно указано
-    # data_sources_inp_seq - последовательности входных данных для всех источников данных
-    # возвращает последовательность входных векторов, выходной вектор, настройки для денормализации. настройки для денормализации вида: settings[i_ds][i_normalize].
+    # нормализует последовательность свечек для всех источников данных, и выходные свечки для всех источников данных, если указаны. Возвращает последовательность входных векторов нейронной сети, и выходной вектор нейронной сети, если указан, и настройки нормализации вида settings[i_ds][i_normalize]
     def normalize_data_sources(self, i_f, i_c, data_sources_inp_seq, data_sources_output=None):
         data_sources_normalizers_inp_seq = []
         data_sources_normalizers_out = []
@@ -465,81 +461,79 @@ class DataManager:
                     one_data.extend(data_sources_normalizers_inp_seq[i_ds][i_n][i_candle])
             finally_inp_seq.append(one_data)
 
-        finally_out_seq = []
+        finally_output = []
         if data_sources_output != None:
             for i_ds in range(len(data_sources_normalizers_out)):
                 for i_n in range(len(data_sources_normalizers_out[i_ds])):
-                    finally_out_seq.extend(data_sources_normalizers_out[i_ds][i_n])
+                    finally_output.extend(data_sources_normalizers_out[i_ds][i_n])
 
-        self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings, finally_inp_seq, finally_out_seq)
+        return finally_inp_seq, finally_output, data_sources_normalizers_settings
 
-        return finally_inp_seq, finally_out_seq, data_sources_normalizers_settings
-
-    # Денормализует входные последовательности для всех нормализаторов, всех источников данных, а так же выходное значение если оно указано
-    # input_vectors_sequence - последовательности входных данных для всех источников данных, для всех нормализаторов
-    # возвращает входную последовательность для всех источников данных и выходное значение для всех источников данных
+    # денормализует последовательность входных векторов нейронной сети, если указана, и/или выходной вектор нейронной сети, если указан. Возвращает данные в формате: input[i_ds][i_c], output[i_ds]
     def denormalize_input_vectors_sequence_output_vector(self, data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=None):
-        data_sources_normalizers_inp_seq = self.input_vectors_sequence_to_data_sources_normalizers(input_vectors_sequence) if input_vectors_sequence != None else None
-        data_sources_normalizers_out = self.output_vector_to_data_sources_normalizers(output_vector) if output_vector != None else None
+        data_sources_normalizers_inp_seq = self.input_vectors_sequence_to_data_sources_normalizers(input_vectors_sequence) if not input_vectors_sequence is None else None
+        data_sources_normalizers_out = self.output_vector_to_data_sources_normalizers(output_vector) if not output_vector is None else None
 
-        data_sources_inp_seq_denorm = []
-        data_sources_out_denorm = []
+        data_sources_normalizers_input_sequence_denorm = []
+        data_sources_normalizers_output_denorm = []
 
         for i_ds in range(len(self.data_sources)):
-            data_source_inp_seq_denorm = []
-            data_source_out_denorm = []
+            normalizers_input_sequence_denorm = []
+            normalizers_output_denorm = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y = self.data_sources_meta[i_ds].normalizers[i_n].denormalize(data_sources_normalizers_settings[i_ds][i_n], normalized_inp_sequence=data_sources_normalizers_inp_seq[i_ds][i_n] if data_sources_normalizers_inp_seq != None else None, normalized_output = data_sources_normalizers_out[i_ds][i_n] if data_sources_normalizers_out != None else None)
-                data_source_inp_seq_denorm.extend(x)
-                data_source_out_denorm.extend(y)
+                x, y = self.data_sources_meta[i_ds].normalizers[i_n].denormalize(data_sources_normalizers_settings[i_ds][i_n], normalized_inp_sequence_by_data_indexes=data_sources_normalizers_inp_seq[i_ds][i_n] if not data_sources_normalizers_inp_seq is None else None, normalized_output_by_data_indexes=data_sources_normalizers_out[i_ds][i_n] if not data_sources_normalizers_out is None else None)
+                normalizers_input_sequence_denorm.append(x)
+                normalizers_output_denorm.append(y)
 
-            data_sources_inp_seq_denorm.append(data_source_inp_seq_denorm)
-            data_sources_out_denorm.append(data_source_out_denorm)
+            data_sources_normalizers_input_sequence_denorm.append(normalizers_input_sequence_denorm)
+            data_sources_normalizers_output_denorm.append(normalizers_output_denorm)
 
-        # finally_inp_seq = []
-        # if inp_seq_data_sources != None:
-        #     for i_candle in range(len(data_sources_normalizers_inp_seq_denorm[0][0])):
-        #         one_data = []
-        #         for i_ds in range(len(data_sources_normalizers_inp_seq_denorm)):
-        #             for i_n in range(len(data_sources_normalizers_inp_seq_denorm[i_ds])):
-        #                 one_data.extend(data_sources_normalizers_inp_seq_denorm[i_ds][i_n][i_candle])
-        #         finally_inp_seq.append(one_data)
-        #
-        # finally_out_seq = []
-        # if output_data_sources != None:
-        #     for i_ds in range(len(data_sources_normalizers_out_denorm)):
-        #         for i_n in range(len(data_sources_normalizers_out_denorm[i_ds])):
-        #             finally_out_seq.extend(data_sources_normalizers_out_denorm[i_ds][i_n])
+        data_sources_input_sequence_denorm = [] # перевод из фомата data_sources_normalizers_input_sequence_denorm[i_ds][i_n][i_c] в формат data_sources_input_sequence_denorm[i_ds][i_c]
+        for i_ds in range(len(data_sources_normalizers_input_sequence_denorm)):
+            input_sequence_denorm = []
+            for i_seq in range(max([len(data_sources_normalizers_input_sequence_denorm[i_ds][n]) for n in range(len(data_sources_normalizers_input_sequence_denorm[i_ds]))])):
+                input_denorm = []
+                for i_n in range(len(data_sources_normalizers_input_sequence_denorm[i_ds])):
+                    if len(data_sources_normalizers_input_sequence_denorm[i_ds][i_n]) > 0:
+                        input_denorm.extend(data_sources_normalizers_input_sequence_denorm[i_ds][i_n][i_seq])
+                input_sequence_denorm.append(input_denorm)
+            data_sources_input_sequence_denorm.append(input_sequence_denorm)
 
-        return data_sources_inp_seq_denorm, data_sources_out_denorm
+        data_sources_output_denorm = [] # перевод из фомата data_sources_normalizers_output_denorm[i_ds][i_n] в формат data_sources_output_denorm[i_ds]
+        for i_ds in range(len(data_sources_normalizers_output_denorm)):
+            output_denorm = []
+            for i_n in range(len(data_sources_normalizers_output_denorm[i_ds])):
+                output_denorm.extend(data_sources_normalizers_output_denorm[i_ds][i_n])
+            data_sources_output_denorm.append(output_denorm)
 
-    def output_vector_to_data_sources_normalizers(self, output):
-        index = 0
-        output_data_sources_normalizers = []
-        for i_ds in range(len(self.data_sources_meta)):
-            data_source_normalizers = []
-            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                data_source_normalizer = []
-                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length):
-                    data_source_normalizer.append(copy.deepcopy(output[i]))
-                index += self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length
-                data_source_normalizers.append(data_source_normalizer)
-            output_data_sources_normalizers.append(data_source_normalizers)
-        return output_data_sources_normalizers
+        return data_sources_input_sequence_denorm, data_sources_output_denorm
 
     def input_vectors_sequence_to_data_sources_normalizers(self, input):
         index = 0
-        input_data_sources_normalizers = []
+        data_sources_normalizers = []
         for i_ds in range(len(self.data_sources_meta)):
             data_source_normalizers = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                data_source_normalizer = []
-                for i in range(index, index + self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length):
-                    data_source_normalizer.append(copy.deepcopy(input[i]))
+                normalizer_input_sequence = []
+                for i_input in range(len(input)):
+                    input_normalizer = input[i_input][index:index + self.data_sources_meta[i_ds].normalizers[i_n].normalize_input_length]
+                    normalizer_input_sequence.append(input_normalizer)
                 index += self.data_sources_meta[i_ds].normalizers[i_n].normalize_input_length
-                data_source_normalizers.append(data_source_normalizer)
-            input_data_sources_normalizers.append(data_source_normalizers)
-        return input_data_sources_normalizers
+                data_source_normalizers.append(normalizer_input_sequence)
+            data_sources_normalizers.append(data_source_normalizers)
+        return data_sources_normalizers
+
+    def output_vector_to_data_sources_normalizers(self, output):
+        index = 0
+        data_sources_normalizers = []
+        for i_ds in range(len(self.data_sources_meta)):
+            data_source_normalizers = []
+            for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                output_normalizer = output[index:index + self.data_sources_meta[i_ds].normalizers[ i_n].normalize_output_length]
+                index += self.data_sources_meta[i_ds].normalizers[i_n].normalize_output_length
+                data_source_normalizers.append(output_normalizer)
+            data_sources_normalizers.append(data_source_normalizers)
+        return data_sources_normalizers
 
     def data_to_mplfinance_candle(self, data):  # data format: [date (1675087200000, милисекунды), open, high, low, close]
         reformatted_data = dict()
