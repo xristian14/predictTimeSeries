@@ -389,6 +389,23 @@ class DataManager:
         period.testing_images_predict_folder = f"{period.testing_images_folder}/predict"
         os.makedirs(period.testing_images_predict_folder)
 
+    def predict_one_step(self, period, datetime_start_timestamp, datetime_end_timestamp, progress_label):
+        x_period, y_period, data_sources_normalizers_settings_period, file_candle_indexes_period = self.get_period_x_y(datetime_start_timestamp, datetime_end_timestamp)
+        data_sources_y_predict_period = []
+        number = 0
+        print(f"{progress_label} {number}%")
+        for i in range(len(x_period)):
+            x_np = np.array(x_period[i])
+            inp = x_np.reshape(1, self.sequence_length, len(x_period[i][0]))
+            pred = period.model.predict(inp, verbose=0)
+            output_vector = pred[0].tolist()
+            data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings_period[i], input_vectors_sequence=None, output_vector=output_vector)
+            data_sources_y_predict_period.append(data_sources_output_denorm)
+            if i / (len(x_period) - 1) >= number / 100:
+                print(f"{progress_label} {number}%")
+                number += 10
+            return (data_sources_y_predict_period, file_candle_indexes_period)
+
     # делает прогнозирование для периода на 1 шаг вперед и визуализирует в файлы
     def predict_visualize_one_step(self, period, save_image_folder, datetime_start_timestamp, datetime_end_timestamp, visualize_one_step_count):
         x_period, y_period, data_sources_normalizers_settings_period, file_candle_indexes_period = self.get_period_x_y(datetime_start_timestamp, datetime_end_timestamp)
@@ -434,7 +451,7 @@ class DataManager:
                 if self.is_visualize_prediction_single:
                     for i_ds_meta in range(len(self.data_sources_meta)):
                         if self.data_sources_meta[i_ds_meta].is_visualize:
-
+                            pass
 
 
                 self.visualize_predict_to_file(data_sources_true, data_sources_predict, f"{save_image_folder}/{timestamp_to_utc_datetime(start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}")
@@ -513,7 +530,26 @@ class DataManager:
                 print(message)
             raise ValueError(error_messages[0])
 
-        # делаю график прогнозрования на 1 свечку вперед для обучающих (+валидационные) и для тестовых данных
+        mean_absolute_percentage_error_epsilon = 0.3
+        # прогнозирую учебный период на одну свечку вперед, и вычисляю ошибку к истинным данным
+        data_sources_y_predict_learn, file_candle_indexes_learn = self.predict_one_step(period, learning_start_timestamp, learning_end_timestamp, "Прогнозирование на один шаг вперед для учебных данных:")
+        mean_absolute_percentage_error_learn_one_step_sum_join = 0
+        mean_absolute_percentage_error_learn_one_step_sum_single = [0] * len(self.data_sources)
+        for i in range(len(data_sources_y_predict_learn)):
+            i_f, i_c = data_sources_y_predict_learn[i]
+            for i_ds in range(len(self.data_sources)):
+                mean_absolute_percentage_error = sum([(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict_learn[i][i_ds][data_index - 1]) / (self.data_sources[i_ds][i_f][i_c][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].data_indexes]) / len(self.data_sources_meta[i_ds].data_indexes)
+                mean_absolute_percentage_error_learn_one_step_sum_join += mean_absolute_percentage_error
+                mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] += mean_absolute_percentage_error
+
+        period.mean_absolute_percentage_error_learn_one_step_join = mean_absolute_percentage_error_learn_one_step_sum_join / len(data_sources_y_predict_learn)
+        period.mean_absolute_percentage_error_learn_one_step_single = [0] * len(self.data_sources)
+        for i_ds in range(len(self.data_sources)):
+            period.mean_absolute_percentage_error_learn_one_step_single[i_ds] = mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] / len(data_sources_y_predict_learn)
+
+
+
+
         is_at_least_one_visualize = False
         for i_ds_meta in range(len(self.data_sources_meta)):
             if self.data_sources_meta[i_ds_meta].is_visualize:

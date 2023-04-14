@@ -39,18 +39,19 @@ class MinMaxScalerBase:
         return val * (max_val - min_val) + min_val
 
 class DateTimeOneHotVector(NormalizerBase):
-    def __init__(self, data_indexes, is_input_denormalize, input_denormalize_weight, is_output_denormalize, output_denormalize_weight, is_month, is_day, is_hour):
+    def __init__(self, data_indexes, is_input_denormalize, input_denormalize_weight, is_output_denormalize, output_denormalize_weight, is_month, is_day_of_week, is_day, is_hour):
         self.data_indexes = data_indexes
         self.is_input_denormalize = is_input_denormalize
         self.input_denormalize_weight = input_denormalize_weight
         self.is_output_denormalize = is_output_denormalize
         self.output_denormalize_weight = output_denormalize_weight
         self.is_month = is_month
+        self.is_day_of_week = is_day_of_week
         self.is_day = is_day
         self.is_hour = is_hour
-        if not is_month and not is_day and not is_hour:
-            raise ValueError("В нормализаторе DateTimeOneHotVector не указан ни месяц, ни день, ни час.")
-        self.normalize_input_length = is_month * 12 + is_day * 31 + is_hour * 24
+        if not is_month and not is_day_of_week and not is_day and not is_hour:
+            raise ValueError("В нормализаторе DateTimeOneHotVector не указан ни месяц, ни день недели, ни день, ни час.")
+        self.normalize_input_length = is_month * 12 + is_day_of_week * 7 + is_day * 31 + is_hour * 24
         self.denormalize_input_length = 0
         self.normalize_output_length = 0
         self.denormalize_output_length = 0
@@ -61,6 +62,7 @@ class DateTimeOneHotVector(NormalizerBase):
     def summary(self, data_source, sequence_length):
         self.sequence_length = sequence_length
         self.months_list = [1,2,3,4,5,6,7,8,9,10,11,12]
+        self.days_of_week_list = [0,1,2,3,4,5,6]
         self.days_list = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]
         self.hours_list = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
 
@@ -75,6 +77,11 @@ class DateTimeOneHotVector(NormalizerBase):
                     input.extend([0] * month_index)
                     input.extend([1])
                     input.extend([0] * (len(self.months_list) - (month_index + 1)))
+                if self.is_day_of_week:
+                    day_of_week_index = self.days_of_week_list.index(date.weekday())
+                    input.extend([0] * day_of_week_index)
+                    input.extend([1])
+                    input.extend([0] * (len(self.days_of_week_list) - (day_of_week_index + 1)))
                 if self.is_day:
                     day_index = self.days_list.index(date.day)
                     input.extend([0] * day_index)
@@ -97,6 +104,41 @@ class DateTimeOneHotVector(NormalizerBase):
         denormalized_inp_sequence_by_data_indexes = []
         denormalized_output_by_data_indexes = []
 
+        return denormalized_inp_sequence_by_data_indexes, denormalized_output_by_data_indexes
+
+# добавляет во входной вектор значения в изначальном виде, и не добавляет их в выходной вектор
+class SameValuesNoOutput(NormalizerBase):
+    def __init__(self, data_indexes, is_input_denormalize, input_denormalize_weight, is_output_denormalize, output_denormalize_weight):
+        self.data_indexes = data_indexes
+        self.is_input_denormalize = is_input_denormalize
+        self.input_denormalize_weight = input_denormalize_weight
+        self.is_output_denormalize = is_output_denormalize
+        self.output_denormalize_weight = output_denormalize_weight
+        self.normalize_input_length = len(data_indexes)
+        self.denormalize_input_length = 0
+        self.normalize_output_length = 0
+        self.denormalize_output_length = 0
+        self.data_indexes_offsets = {}  # смещение во входных нормализованных данных для каждого индекса данных. С помощью этого списка можно понять по какому смещению получить значение определенного индекса данных из нормализованных данных
+        for i in range(len(data_indexes)):
+            self.data_indexes_offsets[data_indexes[i]] = i
+
+    def summary(self, data_source, sequence_length):
+        self.sequence_length = sequence_length
+
+    def normalize(self, inp_sequence, output=None, **kwargs):
+        normalized_inp_sequence_by_data_indexes = []
+        for i in range(len(inp_sequence)):
+            input = []
+            for dat_ind in self.data_indexes:
+                input.append(inp_sequence[i][dat_ind])
+            normalized_inp_sequence_by_data_indexes.append(input)
+        normalized_output_by_data_indexes = []
+        n_setting = NormalizeSetting()
+        return normalized_inp_sequence_by_data_indexes, normalized_output_by_data_indexes, n_setting
+
+    def denormalize(self, norm_setting, normalized_inp_sequence_by_data_indexes = None, normalized_output_by_data_indexes = None, **kwargs):
+        denormalized_inp_sequence_by_data_indexes = []
+        denormalized_output_by_data_indexes = []
         return denormalized_inp_sequence_by_data_indexes, denormalized_output_by_data_indexes
 
 # нормализует данные в диапазоне от минимума до максимума, которые были в источнике данных, до данных нормализации
