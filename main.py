@@ -77,6 +77,8 @@ part_learn_predict = 0.01 # часть от учебных данных для �
 part_test_predict = 0.1 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_learn_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
 part_test_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
+learn_predict_visualize_one_step_count = 3 # количество визуализаций прогнозирования на один шаг вперед для учебного периода
+test_predict_visualize_one_step_count = 3 # количество визуализаций прогнозирования на один шаг вперед для тестового периода
 is_visualize_prediction_union = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Все источники данных будут на одном изображении
 is_visualize_prediction_single = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Каждый источник данных будет на собственном изображении.
 visualize_prediction_cut = 400 # до какой длины обрезать визуализируемые данные. Чтобы если длина последовательности и длина предсказания большие, можно было понять как предсказание корелирует с истинными данными. Независимо от данного значения, визуализированы будут все данные предсказания.
@@ -138,7 +140,7 @@ else:
         features.Period(features.DateTime(year=2020, month=3, day=1), features.Duration(years=1, months=0, days=0), features.Duration(years=0, months=1, days=0), 1, 0, loaded_models[1])
     ]
 
-data_manager = features.DataManager(data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods)
+data_manager = features.DataManager(data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, learn_predict_visualize_one_step_count, test_predict_visualize_one_step_count, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods)
 
 model = Sequential()
 model.add(Input((sequence_length, len(data_manager.x_learn[0][0]))))

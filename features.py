@@ -154,7 +154,7 @@ class DataManager:
         # os.makedirs(self.folder_images_test_predict)
         # os.makedirs(self.folder_images_learn_result)
 
-    def __init__(self, data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods):
+    def __init__(self, data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, learn_predict_visualize_one_step_count, test_predict_visualize_one_step_count, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods):
         # создаем папки для сохранения информации
         self.create_base_folder()
 
@@ -166,6 +166,8 @@ class DataManager:
         self.part_test_predict = part_test_predict
         self.part_learn_predict_visualize = part_learn_predict_visualize
         self.part_test_predict_visualize = part_test_predict_visualize
+        self.learn_predict_visualize_one_step_count = learn_predict_visualize_one_step_count
+        self.test_predict_visualize_one_step_count = test_predict_visualize_one_step_count
         self.is_visualize_prediction_union = is_visualize_prediction_union
         self.is_visualize_prediction_single = is_visualize_prediction_single
         self.visualize_prediction_cut = visualize_prediction_cut
@@ -286,7 +288,7 @@ class DataManager:
                     i_f += 1
             current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
 
-    def get_learning_valid_data(self, datetime_start_timestamp, datetime_end_timestamp):
+    def get_learning_valid_x_y(self, datetime_start_timestamp, datetime_end_timestamp):
         # доходим до первой свечки начала периода
         i_f = 0
         i_c = 0
@@ -306,8 +308,8 @@ class DataManager:
         valid_count = 0
         data_types = [0, 1] # 0 - учебные, 1 - валидационные
         while current_datetime_timestamp <= datetime_end_timestamp:
-            learn_part = learn_count / (learn_count + valid_count)
-            valid_part = valid_count / (learn_count + valid_count)
+            learn_part = learn_count / (learn_count + valid_count) if learn_count + valid_count > 0 else 0
+            valid_part = valid_count / (learn_count + valid_count) if learn_count + valid_count > 0 else 0
             if learn_part < 1 - self.validation_split and valid_part < self.validation_split:
                 data_type = random.choice(data_types)
             elif learn_part < 1 - self.validation_split:
@@ -315,7 +317,7 @@ class DataManager:
             else:
                 data_type = data_types[1]
 
-            x, y, data_sources_normalizers_settings = self.data_sources_periods[i_f][i_c]
+            x, y, data_sources_normalizers_settings = self.data_sources_periods_x_y[i_f][i_c]
 
             if data_type == data_types[0]:
                 x_learn.append(x)
@@ -334,10 +336,129 @@ class DataManager:
             current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
         return (x_learn, y_learn, x_valid, y_valid)
 
+    def get_period_x_y(self, datetime_start_timestamp, datetime_end_timestamp):
+        # доходим до первой свечки начала периода
+        i_f = 0
+        i_c = 0
+        while self.data_sources[0][i_f][i_c][0] < datetime_start_timestamp:
+            i_c += 1
+            if i_c >= len(self.data_sources[0][i_f]):
+                i_c = 0
+                i_f += 1
+        current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+
+        x_period = []
+        y_period = []
+        data_sources_normalizers_settings_period = []
+        file_candle_indexes_period = []
+
+        while current_datetime_timestamp <= datetime_end_timestamp:
+            x, y, data_sources_normalizers_settings = self.data_sources_periods_x_y[i_f][i_c]
+
+            x_period.append(x)
+            y_period.append(y)
+            data_sources_normalizers_settings_period.append(data_sources_normalizers_settings)
+            file_candle_indexes_period.append((i_f, i_c))
+
+            while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
+                i_c += 1
+                if i_c >= len(self.data_sources[0][i_f]):
+                    i_c = 0
+                    i_f += 1
+            current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+        return (x_period, y_period, data_sources_normalizers_settings_period, file_candle_indexes_period)
+
+    def create_period_folders(self, period):
+        period.base_folder = f"{self.base_folder}/{period.learning_start.date_time.strftime('%Y-%m-%d %Hh %Mm')} - {period.testing_end.date_time.strftime('%Y-%m-%d %Hh %Mm')}"
+        os.makedirs(period.base_folder)
+        period.learning_folder = f"{period.base_folder}/learning"
+        os.makedirs(period.learning_folder)
+        period.learning_data_folder = f"{period.learning_folder}/data"
+        os.makedirs(period.learning_data_folder)
+        period.learning_images_folder = f"{period.learning_folder}/images"
+        os.makedirs(period.learning_images_folder)
+        period.learning_images_predict_folder = f"{period.learning_images_folder}/predict"
+        os.makedirs(period.learning_images_predict_folder)
+
+        period.testing_folder = f"{period.base_folder}/testing"
+        os.makedirs(period.testing_folder)
+        period.testing_data_folder = f"{period.testing_folder}/data"
+        os.makedirs(period.testing_data_folder)
+        period.testing_images_folder = f"{period.testing_folder}/images"
+        os.makedirs(period.testing_images_folder)
+        period.testing_images_predict_folder = f"{period.testing_images_folder}/predict"
+        os.makedirs(period.testing_images_predict_folder)
+
+    # делает прогнозирование для периода на 1 шаг вперед и визуализирует в файлы
+    def predict_visualize_one_step(self, period, save_image_folder, datetime_start_timestamp, datetime_end_timestamp, visualize_one_step_count):
+        x_period, y_period, data_sources_normalizers_settings_period, file_candle_indexes_period = self.get_period_x_y(datetime_start_timestamp, datetime_end_timestamp)
+        data_sources_y_period_predict = []
+        number = 0
+        print(f"Прогнозирование на один шаг вперед: {number}%")
+        for i in range(len(x_period)):
+            x_np = np.array(x_period[i])
+            inp = x_np.reshape(1, self.sequence_length, len(x_period[i][0]))
+            pred = period.model.predict(inp, verbose=0)
+            output_vector = pred[0].tolist()
+            data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings_period[i], input_vectors_sequence=None, output_vector=output_vector)
+            data_sources_y_period_predict.append(data_sources_output_denorm)
+            if i / len(x_period - 1) >= number / 100:
+                print(f"Прогнозирование на один шаг вперед: {number}%")
+                number += 10
+
+        start_timestamp = None
+        end_timestamp = None
+        data_sources_true = []
+        data_sources_predict = []
+        data_sources_is_visualize_indexes = []
+        for i_ds in range(len(self.data_sources_meta)):
+            if self.data_sources_meta[i_ds].is_visualize:
+                data_sources_true.append([])
+                data_sources_predict.append([])
+                data_sources_is_visualize_indexes.append(i_ds)
+
+        visualize_count = 0
+        for i in range(len(data_sources_y_period_predict)):
+            for i_ds in range(len(self.data_sources)):
+                if i_ds in data_sources_is_visualize_indexes:
+                    i_f, i_c = file_candle_indexes_period[i]
+                    data_sources_true[i_ds].append(self.data_sources[i_ds][i_f][i_c])
+                    data_sources_predict[i_ds].append(data_sources_y_period_predict[i][i_ds])
+                    if start_timestamp is None:
+                        start_timestamp = self.data_sources[i_ds][i_f][i_c][0]
+                    end_timestamp = self.data_sources[i_ds][i_f][i_c][0]
+            if len(data_sources_true) >= self.visualize_prediction_cut:
+                if self.is_visualize_prediction_union and len(self.data_sources) > 1:
+                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, f"{save_image_folder}/union {timestamp_to_utc_datetime(start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}")
+
+                if self.is_visualize_prediction_single:
+                    for i_ds_meta in range(len(self.data_sources_meta)):
+                        if self.data_sources_meta[i_ds_meta].is_visualize:
+
+
+
+                self.visualize_predict_to_file(data_sources_true, data_sources_predict, f"{save_image_folder}/{timestamp_to_utc_datetime(start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}")
+                del data_sources_true[:]
+                del data_sources_predict[:]
+                start_timestamp = None
+                end_timestamp = None
+                visualize_count += 1
+                if visualize_count >= visualize_one_step_count:
+                    break
+
+        if len(data_sources_true) >= self.visualize_prediction_cut:
+            self.visualize_predict_to_file(data_sources_true, data_sources_predict, f"{save_image_folder}")
+            del data_sources_true[:]
+            del data_sources_predict[:]
+
     def handle_period(self, period):
+        self.create_period_folders(period)
+
         learning_start_timestamp = utc_datetime_to_timestamp(period.learning_start.date_time)
         learning_end_timestamp = utc_datetime_to_timestamp(period.learning_end.date_time)
-        x_learn, y_learn, x_valid, y_valid = self.get_learning_valid_data(learning_start_timestamp, learning_end_timestamp)
+        testing_start_timestamp = utc_datetime_to_timestamp(period.testing_start.date_time)
+        testing_end_timestamp = utc_datetime_to_timestamp(period.testing_end.date_time)
+        x_learn, y_learn, x_valid, y_valid = self.get_learning_valid_x_y(learning_start_timestamp, learning_end_timestamp)
         print(f"длина обучающей выборки={len(x_learn)}")
         print(f"длина выборки валидации={len(x_valid)}")
         if period.model is None:
@@ -355,7 +476,7 @@ class DataManager:
                 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
                 # "binary_crossentropy" tf.keras.losses.MeanAbsolutePercentageError()
 
-                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=200, validation_data=(np.array(x_valid), np.array(y_valid)))
+                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=30, validation_data=(np.array(x_valid), np.array(y_valid)))
 
                 fig_w = 6
                 fig_h = 5
@@ -379,7 +500,28 @@ class DataManager:
             val, idx = min((val, idx) for (idx, val) in enumerate(models_losses))
             period.model = models[idx]
 
+        error_messages = []
+        if period.model.input_shape[1] != self.sequence_length:
+            error_messages.append(f"Длина последовательности входных данных не совпадает с формой входного тензора модели нейронной сети.")
+        if period.model.input_shape[2] != len(x_learn[0][0]):
+            error_messages.append(f"Длина входного вектора не совпадает с формой входного тензора модели нейронной сети.")
+        if period.model.output_shape[1] != len(y_learn[0]):
+            error_messages.append(f"Длина выходного вектора не совпадает с формой входного тензора модели нейронной сети.")
 
+        if len(error_messages) > 0:
+            for message in error_messages:
+                print(message)
+            raise ValueError(error_messages[0])
+
+        # делаю график прогнозрования на 1 свечку вперед для обучающих (+валидационные) и для тестовых данных
+        is_at_least_one_visualize = False
+        for i_ds_meta in range(len(self.data_sources_meta)):
+            if self.data_sources_meta[i_ds_meta].is_visualize:
+                is_at_least_one_visualize = True
+        if is_at_least_one_visualize:
+            self.predict_visualize_one_step(period, period.learning_images_folder, learning_start_timestamp, learning_end_timestamp)
+        else:
+            print("Ни один источник данных не настроен на визуализацию. Не были визуализированы данные, спрогнозированные на один шаг вперед.")
 
     def periods_process(self):
         error_messages = []
@@ -624,8 +766,136 @@ class DataManager:
                 reformatted_data['Close'].append(item[1])
         return reformatted_data
 
-    # data_sources_true[0] и data_sources_predict[0] должны иметь одинаковое количество дат
-    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, data_type, save_file_path):
+    # data_sources_true[0] и data_sources_predict[0] должны иметь одинаковую длину
+    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, data_sources_meta, save_image_path):
+        add_plot = []
+        where_values_end_inp_seq = [False] * len(data_sources_predict[0])
+        y_over_rate = 0.02 # отступ от верхнего и нижнего края
+        data_type_rate = 0.008 # толщина линии типа данных
+        for i in range(len(data_sources_predict[0])):
+            if len(data_sources_predict[0][i]) > 1:
+                where_values_end_inp_seq[i - 1] = True
+                break
+        for i_ds in range(len(data_sources_true) - 1, -1, -1):
+            for i_p in range(len(self.data_sources_meta[i_ds].visualize) - 1, -1, -1):
+                type_chart, data_indexes = self.data_sources_meta[i_ds].visualize[i_p]
+                if type_chart == "candle":
+                    if len(data_indexes) != 2 and len(data_indexes) != 4:
+                        raise ValueError("Количество индексов в типе визуализации candle должно быть 4 или 2.")
+                    # формируем список с данными формата: [date, open, high, low, close]
+                    data_true = [[data_sources_true[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(len(data_sources_true[i_ds]))]
+                    data_predict = []
+                    i_candle = 0
+                    while len(data_sources_predict[i_ds][i_candle]) == 1:
+                        data_predict.append([])
+                        i_candle += 1
+                    data_predict.extend([[data_sources_predict[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(i_candle, len(data_sources_predict[i_ds]))])
+                    if len(data_indexes) == 2:
+                        for i_d in range(len(data_true)):
+                            data_true[i_d].append(data_true[i_d][1])
+                            data_true[i_d].insert(0, data_true[i_d][0])
+
+                            if i_d >= i_candle:
+                                data_predict[i_d].append(data_predict[i_d][1])
+                                data_predict[i_d].insert(0, data_predict[i_d][0])
+
+                    # добавляем даты
+                    for i_d in range(len(data_true)):
+                        data_true[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+                        data_predict[i_d].insert(0, data_sources_predict[i_ds][i_d][0])
+
+                    high_canal = [item[2] for item in data_true]
+                    low_canal = [item[3] for item in data_true]
+
+                    mplfinance_data_true = self.data_to_mplfinance_candle(data_true)
+                    mplfinance_data_predict = self.data_to_mplfinance_candle(data_predict)
+
+                    p_data_true = pd.DataFrame.from_dict(mplfinance_data_true)
+                    p_data_true.set_index('Date', inplace=True)
+                    p_data_predict = pd.DataFrame.from_dict(mplfinance_data_predict)
+                    p_data_predict.set_index('Date', inplace=True)
+
+                    ymin = min(min([min(item[1:5]) for item in data_true]), min([min(item[1:5]) for item in data_predict[i_candle:]]))
+                    ymax = max(max([max(item[1:5]) for item in data_true]), max([max(item[1:5]) for item in data_predict[i_candle:]]))
+                    data_type_width = (ymax - ymin) * data_type_rate
+                    y_over = (ymax - ymin) * y_over_rate
+                    ymin -= y_over + data_type_width
+                    ymax += y_over
+
+                    y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
+                    if i_p == 0:
+                        y_label = f"{y_label} \"{self.data_sources_file_names[i_ds][0][:len(self.data_sources_file_names[i_ds][0]) - 4].replace('.', '_')}\""
+                    panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
+
+                    dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
+
+                    if i_ds == 0 and i_p == 0:
+                        add_plot.append(mpf.make_addplot(high_canal, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
+                        add_plot.append(mpf.make_addplot(low_canal, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='candle', ylim=(ymin,ymax)))
+                    else:
+                        add_plot.append(mpf.make_addplot(high_canal, type='line', panel=panel_num, fill_between=[dict_end_inp_seq], ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(low_canal, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_true, type='candle', panel=panel_num, ylim=(ymin, ymax)))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='candle', panel=panel_num, ylim=(ymin, ymax)))
+
+                elif type_chart == "line":
+                    if len(data_indexes) != 1:
+                        raise ValueError("Количество индексов в типе визуализации line должно быть 1.")
+                    data_true = [[data_sources_true[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(len(data_sources_true[i_ds]))]
+                    data_predict = []
+                    i_candle = 0
+                    while len(data_sources_predict[i_ds][i_candle]) == 1:
+                        data_predict.append([])
+                        i_candle += 1
+                    data_predict.extend([[data_sources_predict[i_ds][i_c][dat_ind] for dat_ind in data_indexes] for i_c in range(i_candle, len(data_sources_predict[i_ds]))])
+
+                    # добавляем даты
+                    for i_d in range(len(data_true)):
+                        data_true[i_d].insert(0, data_sources_true[i_ds][i_d][0])
+                        data_predict[i_d].insert(0, data_sources_predict[i_ds][i_d][0])
+
+                    mplfinance_data_true = self.data_to_mplfinance_line(data_true)
+                    mplfinance_data_predict = self.data_to_mplfinance_line(data_predict)
+
+                    p_data_true = pd.DataFrame.from_dict(mplfinance_data_true)
+                    p_data_true.set_index('Date', inplace=True)
+                    p_data_predict = pd.DataFrame.from_dict(mplfinance_data_predict)
+                    p_data_predict.set_index('Date', inplace=True)
+
+                    ymin = min(min([item[1] for item in data_true]), min([item[1] for item in data_predict[i_candle:]]))
+                    ymax = max(max([item[1] for item in data_true]), max([item[1] for item in data_predict[i_candle:]]))
+                    data_type_width = (ymax - ymin) * data_type_rate
+                    y_over = (ymax - ymin) * y_over_rate
+                    ymin -= y_over + data_type_width
+                    ymax += y_over
+
+                    y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
+                    if i_p == 0:
+                        y_label = f"{y_label} \"{self.data_sources_file_names[i_ds][0][:len(self.data_sources_file_names[i_ds][0]) - 4].replace('.', '_')}\""
+                    panel_num = i_ds * len(self.data_sources_meta[i_ds].visualize) + i_p
+
+                    dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
+
+                    if i_ds == 0 and i_p == 0:
+                        add_plot.append(mpf.make_addplot(p_data_true, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='line', ylim=(ymin,ymax), linewidths = 1, alpha = 1, color="springgreen"))
+                    else:
+                        add_plot.append(mpf.make_addplot(p_data_true, type='line', panel=panel_num, fill_between=[dict_end_inp_seq], ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
+                        add_plot.append(mpf.make_addplot(p_data_predict, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="springgreen"))
+
+        myrcparams = {'axes.labelsize': 'small'}
+        my_style = mpf.make_mpf_style(base_mpf_style='yahoo', facecolor='white', y_on_right=False, rc=myrcparams)
+        panel_ratios = ()
+        for i_ds in range(len(data_sources_true)):
+            for i_p in range(len(self.data_sources_meta[i_ds].visualize_ratio)):
+                panel_ratios += (self.data_sources_meta[i_ds].visualize_ratio[i_p],)
+        mpf.plot(p_data_true, type='candle' if type_chart == "candle" else 'line', style=my_style, ylabel=y_label, ylim=(ymin,ymax), addplot=add_plot, fill_between=[dict_end_inp_seq], panel_ratios=panel_ratios, figsize=(18,9), datetime_format="%Y-%b-%d", tight_layout=True, savefig=save_image_path)
+        #, fill_between = [dict1, dict2, dict3]  image_path = f"{save_folder_path}/{str(i).rjust(2, '0')}_{str(candle_index).rjust(7, '0')}", columns=None if type_chart == "candle" else ['Close']
+        print(f"save image {save_image_path}")
+
+    # data_sources_true[0] и data_sources_predict[0] должны иметь одинаковую длину
+    def visualize_predict_to_file2(self, data_sources_true, data_sources_predict, data_type, save_file_path):
         add_plot = []
         where_values_none = []
         where_values_learn = []
