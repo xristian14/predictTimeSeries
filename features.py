@@ -107,10 +107,11 @@ class Period:
         self.model = model
 
 class DataSourceMeta:
-    def __init__(self, files, date_index, data_indexes, is_save_data, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
+    def __init__(self, files, date_index, data_indexes_in_file, losses_data_indexes, is_save_data, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
         self.files = files # список с файлами
         self.date_index = date_index # индекс даты
-        self.data_indexes = data_indexes # индексы данных, которые нужно считать из файла
+        self.data_indexes_in_file = data_indexes_in_file # индексы данных, которые нужно считать из файла
+        self.losses_data_indexes = losses_data_indexes # индексы считанных данных, для которых будет вычисляться ошибка для данного источника данных
         self.is_save_data = is_save_data # сохранять ли спрогнозированные данные для данного источника данных
         self.normalizers = normalizers # список с нормализаторами для источника данных
         self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "line". Для "candle" может быть передано или 4 или 2 индекса данных, для "line" может быть передан только один индекс данных. Пример графиков цены и объема: [("candle", [1,2,3,4]), ("line", [5])]
@@ -186,7 +187,7 @@ class DataManager:
         # считываем источники данных
         self.data_sources = []  # данные всех файлов всех источников данных
         for i_ds in range(len(data_sources_meta)):
-            self.data_sources.append([self.read_csv_file(file, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes) for file in data_sources_meta[i_ds].files])
+            self.data_sources.append([self.read_csv_file(file, data_sources_meta[i_ds].date_index, data_sources_meta[i_ds].data_indexes_in_file) for file in data_sources_meta[i_ds].files])
 
         # проверяем, совпадает ли: количество файлов у разных источников данных, количество данных в файлах разных источников данных, даты в данных разных источников данных
         error_messages = []
@@ -538,7 +539,7 @@ class DataManager:
         for i in range(len(data_sources_y_predict_learn)):
             i_f, i_c = data_sources_y_predict_learn[i]
             for i_ds in range(len(self.data_sources)):
-                mean_absolute_percentage_error = sum([(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict_learn[i][i_ds][data_index - 1]) / (self.data_sources[i_ds][i_f][i_c][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].data_indexes]) / len(self.data_sources_meta[i_ds].data_indexes)
+                mean_absolute_percentage_error = sum([(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict_learn[i][i_ds][data_index - 1]) / (self.data_sources[i_ds][i_f][i_c][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].data_indexes_in_file]) / len(self.data_sources_meta[i_ds].data_indexes_in_file)
                 mean_absolute_percentage_error_learn_one_step_sum_join += mean_absolute_percentage_error
                 mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] += mean_absolute_percentage_error
 
@@ -719,9 +720,7 @@ class DataManager:
                     for i_n in data_index_normalizers_indexes:
                         data_index_values_weights.append((data_sources_normalizers_output_denorm[i_ds][i_n][self.data_sources_meta[i_ds].normalizers[i_n].data_indexes_offsets[data_index]], self.data_sources_meta[i_ds].normalizers[i_n].output_denormalize_weight))
                 if len(data_index_values_weights) > 0:
-                    weighted_values_sum = sum(
-                        [data_index_values_weights[k][0] * data_index_values_weights[k][1] for k in
-                         range(len(data_index_values_weights))])
+                    weighted_values_sum = sum([data_index_values_weights[k][0] * data_index_values_weights[k][1] for k in range(len(data_index_values_weights))])
                     weights_sum = sum([data_index_values_weights[k][1] for k in range(len(data_index_values_weights))])
                     if weights_sum > 0:
                         output_denorm.append(weighted_values_sum / weights_sum)
@@ -807,7 +806,6 @@ class DataManager:
         add_plot = []
         where_values_end_inp_seq = [False] * len(data_sources_predict[0])
         y_over_rate = 0.02 # отступ от верхнего и нижнего края
-        data_type_rate = 0.008 # толщина линии типа данных
         for i in range(len(data_sources_predict[0])):
             if len(data_sources_predict[0][i]) > 1:
                 where_values_end_inp_seq[i - 1] = True
@@ -853,9 +851,8 @@ class DataManager:
 
                     ymin = min(min([min(item[1:5]) for item in data_true]), min([min(item[1:5]) for item in data_predict[i_candle:]]))
                     ymax = max(max([max(item[1:5]) for item in data_true]), max([max(item[1:5]) for item in data_predict[i_candle:]]))
-                    data_type_width = (ymax - ymin) * data_type_rate
                     y_over = (ymax - ymin) * y_over_rate
-                    ymin -= y_over + data_type_width
+                    ymin -= y_over
                     ymax += y_over
 
                     y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
@@ -901,9 +898,8 @@ class DataManager:
 
                     ymin = min(min([item[1] for item in data_true]), min([item[1] for item in data_predict[i_candle:]]))
                     ymax = max(max([item[1] for item in data_true]), max([item[1] for item in data_predict[i_candle:]]))
-                    data_type_width = (ymax - ymin) * data_type_rate
                     y_over = (ymax - ymin) * y_over_rate
-                    ymin -= y_over + data_type_width
+                    ymin -= y_over
                     ymax += y_over
 
                     y_label = self.data_sources_meta[i_ds].visualize_name[i_p]
