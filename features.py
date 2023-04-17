@@ -107,8 +107,9 @@ class Period:
         self.model = model
 
 class DataSourceMeta:
-    def __init__(self, files, date_index, data_indexes_in_file, losses_data_indexes, is_save_data, output_inserts, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
+    def __init__(self, files, short_name, date_index, data_indexes_in_file, losses_data_indexes, is_save_data, output_inserts, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
         self.files = files # список с файлами
+        self.short_name = short_name
         self.date_index = date_index # индекс даты
         self.data_indexes_in_file = data_indexes_in_file # индексы данных, которые нужно считать из файла
         self.losses_data_indexes = losses_data_indexes # индексы считанных данных, для которых будет вычисляться ошибка для данного источника данных
@@ -440,7 +441,7 @@ class DataManager:
                 if self.is_visualize_prediction_single:
                     i_ds = 0
                     for i_visual_ds in visualize_data_sources_indexes:
-                        self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_file_names[i_visual_ds][0][:len(self.data_sources_file_names[i_visual_ds][0]) - 4]} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+                        self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_meta[i_visual_ds].short_name} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
                         i_ds += 1
 
                 for i_ds2 in range(len(data_sources_true)):
@@ -469,17 +470,18 @@ class DataManager:
             models_losses = []
             i = 0
             while True:
+                print(f"Input Shape: {(self.sequence_length, len(x_learn[0][0]))}")
                 model = Sequential()
                 model.add(Input((self.sequence_length, len(x_learn[0][0]))))
                 # model.add(LSTM(128, return_sequences=True))
-                model.add(LSTM(128))
+                model.add(LSTM(64))
                 model.add(Dense(len(y_learn[0]), activation='sigmoid'))
                 model.summary()
 
                 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
                 # "binary_crossentropy" tf.keras.losses.MeanAbsolutePercentageError()
 
-                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=30, validation_data=(np.array(x_valid), np.array(y_valid)))
+                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=40, validation_data=(np.array(x_valid), np.array(y_valid)))
 
                 fig_w = 6
                 fig_h = 5
@@ -850,7 +852,7 @@ class DataManager:
 
                     y_label = self.data_sources_meta[i_visual_ds].visualize_name[i_panel]
                     if i_panel == 0:
-                        y_label = f"{y_label} \"{self.data_sources_file_names[i_visual_ds][0][:len(self.data_sources_file_names[i_ds][0]) - 4]}\"" # .replace('.', '_')
+                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\""
                     panel_num = sum([len(self.data_sources_meta[visualize_data_sources_indexes[i_i_ds]].visualize) for i_i_ds in range(i_ds, -1, -1)]) - (len(self.data_sources_meta[visualize_data_sources_indexes[i_ds]].visualize) - i_panel)
 
                     dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
@@ -897,7 +899,7 @@ class DataManager:
 
                     y_label = self.data_sources_meta[i_visual_ds].visualize_name[i_panel]
                     if i_panel == 0:
-                        y_label = f"{y_label} \"{self.data_sources_file_names[i_visual_ds][0][:len(self.data_sources_file_names[i_ds][0]) - 4]}\"" # .replace('.', '_')
+                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\""
                     panel_num = sum([len(self.data_sources_meta[visualize_data_sources_indexes[i_i_ds]].visualize) for i_i_ds in range(i_ds, -1, -1)]) - (len(self.data_sources_meta[visualize_data_sources_indexes[i_ds]].visualize) - i_panel)
 
                     dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
