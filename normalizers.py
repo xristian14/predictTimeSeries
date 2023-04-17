@@ -218,8 +218,8 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
                 self.data_source_settings[i_f][i_c] = n_setting
 
     def normalize(self, inp_sequence, output=None, **kwargs):
-        range_min = self.data_source_settings[kwargs["i_f"]][kwargs["i_c"]].range_min
-        range_max = self.data_source_settings[kwargs["i_f"]][kwargs["i_c"]].range_max
+        range_min = self.data_source_settings[kwargs["output_i_f"]][kwargs["output_i_c"] - 1].range_min
+        range_max = self.data_source_settings[kwargs["output_i_f"]][kwargs["output_i_c"] - 1].range_max
         if "add_candles" in kwargs:
             add_range_min = min([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
             add_range_max = max([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
@@ -269,8 +269,8 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
 class InsertionBase:
     def summary(self):
         raise NotImplementedError(f"Не переопределен метод summary класса {self.__class__.__name__}")
-    def normalize(self):
-        raise NotImplementedError(f"Не переопределен метод normalize класса {self.__class__.__name__}")
+    def make_insert(self):
+        raise NotImplementedError(f"Не переопределен метод make_insert класса {self.__class__.__name__}")
 
 # вставляет в целевой список по индексу insert_index значение, является ли данная свечка филлером 1 (да) 0 (нет), на основе того что в америке торги идут в будние дни, с 14:00-20:00 UTC+00:00 в летнее время и с 15:00-21:00 UTC+00:00 в зимнее время, и переход на летнее время происходит во второе воскресенье марта, а на зимнее в первое воскресенье ноября. Свечка считается не торгвой если дата её середины находится в неторговом периоде. Работает с датами с 2000 по 2030
 class InsertionAmericanIsFiller(InsertionBase):
@@ -311,7 +311,7 @@ class InsertionAmericanIsFiller(InsertionBase):
         self.summer_winter_transition[2029] = (11, 4)
         self.summer_winter_transition[2030] = (10, 3)
 
-    def insert(self, target_list, **kwargs):
+    def make_insert(self, target_list, **kwargs):
         mid_datetime_timestamp = kwargs["datetime_timestamp"] + kwargs["interval_milliseconds"] / 2.0 # время середины свечки
         mid_datetime = features.timestamp_to_utc_datetime(mid_datetime_timestamp)
         if not mid_datetime.year in self.summer_winter_transition:
@@ -342,8 +342,20 @@ class InsertionAmericanIsFiller(InsertionBase):
             else:
                 if not (mid_datetime.hour >= 15 and mid_datetime.hour <= 21):
                     is_filler = True
-        value = 1 if is_filler else 0
+        value = 1.0 if is_filler else 0.0
         target_list.insert(self.insert_index, value)
+
+# вставляет в целевой список по индексу insert_index значение value
+class InsertionFixedValue(InsertionBase):
+    def __init__(self, insert_index, value):
+        self.insert_index = insert_index
+        self.value = float(value)
+
+    def summary(self, **kwargs):
+        pass
+
+    def make_insert(self, target_list, **kwargs):
+        target_list.insert(self.insert_index, self.value)
 
 # RelativeMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max
 class RelativeMinMaxScaler(NormalizerBase, MinMaxScalerBase):

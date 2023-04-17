@@ -113,7 +113,7 @@ class DataSourceMeta:
         self.data_indexes_in_file = data_indexes_in_file # индексы данных, которые нужно считать из файла
         self.losses_data_indexes = losses_data_indexes # индексы считанных данных, для которых будет вычисляться ошибка для данного источника данных
         self.is_save_data = is_save_data # сохранять ли спрогнозированные данные для данного источника данных
-        self.output_inserts = output_inserts # список с вставками для выходного вектора. Нужен чтобы добавлять в выходной вектор элементы, которые не были спрогнозированы нейронной сетью, и значение которых известно или вычисляемо
+        self.output_inserts = output_inserts # список с вставками в денормализованный список значений данного источника данных. Нужен чтобы добавлять значения, которые не были спрогнозированы нейронной сетью, и поэтому отсутствуют в денормализованном списке, но имеются во входном списке значений данного источника данных
         self.normalizers = normalizers # список с нормализаторами для источника данных
         self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "line". Для "candle" может быть передано или 4 или 2 индекса данных, для "line" может быть передан только один индекс данных. Пример графиков цены и объема: [("candle", [1,2,3,4]), ("line", [5])]
         self.is_visualize = is_visualize # нужно ли визуализировать источник данных
@@ -148,13 +148,6 @@ class DataManager:
             folder_id += 1
         self.base_folder = f"{app_files_folder_name}/{str(folder_id).rjust(4, '0')}"
         os.makedirs(self.base_folder)
-        # self.folder_images_learn_predict = f"{self.folder_base}/images/learn_predict"
-        # self.folder_images_test_predict = f"{self.folder_base}/images/test_predict"
-        # self.folder_images_learn_result = f"{self.folder_base}/images/learn_result"
-        # os.makedirs(f"{self.folder_base}/images")
-        # os.makedirs(self.folder_images_learn_predict)
-        # os.makedirs(self.folder_images_test_predict)
-        # os.makedirs(self.folder_images_learn_result)
 
     def __init__(self, data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, learn_predict_visualize_one_step_count, test_predict_visualize_one_step_count, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods):
         # создаем папки для сохранения информации
@@ -281,7 +274,7 @@ class DataManager:
         while current_datetime_timestamp <= self.periods_end_timestamp:
             data_sources_inp_seq = self.get_data_sources_input_sequence(i_f, i_c - 1)
             data_sources_output = self.get_data_sources_output(i_f, i_c)
-            x, y, data_sources_normalizers_settings = self.normalize_data_sources(i_f, i_c - 1, data_sources_inp_seq, data_sources_output)
+            x, y, data_sources_normalizers_settings = self.normalize_data_sources(output_i_f=i_f, output_i_c=i_c, data_sources_inp_seq=data_sources_inp_seq, data_sources_output=data_sources_output)
             self.data_sources_periods_x_y[i_f][i_c] = (x, y, data_sources_normalizers_settings)
 
             if ((current_datetime_timestamp - self.periods_start_timestamp) / self.interval_milliseconds) / total_count >= number / 100:
@@ -406,7 +399,8 @@ class DataManager:
             inp = x_np.reshape(1, self.sequence_length, len(x_period[i][0]))
             pred = period.model.predict(inp, verbose=0)
             output_vector = pred[0].tolist()
-            data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings_period[i], input_vectors_sequence=None, output_vector=output_vector)
+            output_datetime_timestamp = self.data_sources[0][file_candle_indexes_period[i][0]][file_candle_indexes_period[i][1]][0]
+            data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_insert_input_vectors_sequence_output_vector(data_sources_normalizers_settings_period[i], input_vectors_sequence=None, output_vector=output_vector, output_datetime_timestamp=output_datetime_timestamp)
             data_sources_y_predict_period.append(data_sources_output_denorm)
             if i / (len(x_period) - 1) >= number / 100:
                 print(f"{progress_label} {number}%")
@@ -424,7 +418,7 @@ class DataManager:
             inp = x_np.reshape(1, self.sequence_length, len(x_period[i][0]))
             pred = period.model.predict(inp, verbose=0)
             output_vector = pred[0].tolist()
-            data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_input_vectors_sequence_output_vector(data_sources_normalizers_settings_period[i], input_vectors_sequence=None, output_vector=output_vector)
+            data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_insert_input_vectors_sequence_output_vector(data_sources_normalizers_settings_period[i], input_vectors_sequence=None, output_vector=output_vector)
             data_sources_y_period_predict.append(data_sources_output_denorm)
             if i / len(x_period - 1) >= number / 100:
                 print(f"Прогнозирование на один шаг вперед: {number}%")
@@ -540,21 +534,19 @@ class DataManager:
         mean_absolute_percentage_error_epsilon = 0.3
         # прогнозирую учебный период на одну свечку вперед, и вычисляю ошибку к истинным данным
         data_sources_y_predict_learn, file_candle_indexes_learn = self.predict_one_step(period, learning_start_timestamp, learning_end_timestamp, "Прогнозирование на один шаг вперед для учебных данных:")
-        mean_absolute_percentage_error_learn_one_step_sum_join = 0
         mean_absolute_percentage_error_learn_one_step_sum_single = [0] * len(self.data_sources)
         for i in range(len(data_sources_y_predict_learn)):
-            i_f, i_c = data_sources_y_predict_learn[i]
+            i_f, i_c = file_candle_indexes_learn[i]
             for i_ds in range(len(self.data_sources)):
-                mean_absolute_percentage_error = sum([(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict_learn[i][i_ds][data_index - 1]) / (self.data_sources[i_ds][i_f][i_c][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].data_indexes_in_file]) / len(self.data_sources_meta[i_ds].data_indexes_in_file)
-                mean_absolute_percentage_error_learn_one_step_sum_join += mean_absolute_percentage_error
+                mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict_learn[i][i_ds][data_index]) / (self.data_sources[i_ds][i_f][i_c][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
                 mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] += mean_absolute_percentage_error
 
-        period.mean_absolute_percentage_error_learn_one_step_join = mean_absolute_percentage_error_learn_one_step_sum_join / len(data_sources_y_predict_learn)
         period.mean_absolute_percentage_error_learn_one_step_single = [0] * len(self.data_sources)
         for i_ds in range(len(self.data_sources)):
             period.mean_absolute_percentage_error_learn_one_step_single[i_ds] = mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] / len(data_sources_y_predict_learn)
+        period.mean_absolute_percentage_error_learn_one_step_join = sum(period.mean_absolute_percentage_error_learn_one_step_single) / len(self.data_sources)
 
-
+        y = 0
 
 
         is_at_least_one_visualize = False
@@ -618,8 +610,8 @@ class DataManager:
             print(f"Обрабатывается период {i + 1}/{len(self.periods)}")
             self.handle_period(self.periods[i])
 
-    # нормализует последовательность свечек для всех источников данных, и выходные свечки для всех источников данных, если указаны. Возвращает последовательность входных векторов нейронной сети, и выходной вектор нейронной сети, если указан, и настройки нормализации вида settings[i_ds][i_normalize]
-    def normalize_data_sources(self, i_f, i_c, data_sources_inp_seq, data_sources_output=None):
+    # нормализует последовательность свечек для всех источников данных, и выходные свечки для всех источников данных, если указаны. Возвращает последовательность входных векторов нейронной сети, и выходной вектор нейронной сети, если указан, и настройки нормализации вида settings[i_ds][i_normalize]. output_i_f, output_i_c - индексы
+    def normalize_data_sources(self, output_i_f, output_i_c, data_sources_inp_seq, data_sources_output=None):
         data_sources_normalizers_inp_seq = []
         data_sources_normalizers_out = []
         data_sources_normalizers_settings = []
@@ -629,7 +621,7 @@ class DataManager:
             normalizers_out = []
             normalizers_settings = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds], i_f=i_f, i_c=i_c)
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds], output_i_f=output_i_f, output_i_c=output_i_c)
                 normalizers_inp_seq.append(x)
                 normalizers_out.append(y)
                 normalizers_settings.append(n_setting)
@@ -652,10 +644,12 @@ class DataManager:
                 for i_n in range(len(data_sources_normalizers_out[i_ds])):
                     finally_output.extend(data_sources_normalizers_out[i_ds][i_n])
 
+        data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_insert_input_vectors_sequence_output_vector(data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=finally_output, output_datetime_timestamp=self.data_sources[0][output_i_f][output_i_c][0])
+
         return finally_inp_seq, finally_output, data_sources_normalizers_settings
 
-    # денормализует последовательность входных векторов нейронной сети, если указана, и/или выходной вектор нейронной сети, если указан. Возвращает данные в формате: input[i_ds][i_c], output[i_ds]
-    def denormalize_input_vectors_sequence_output_vector(self, data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=None):
+    # денормализует последовательность входных векторов нейронной сети, если указана, и/или выходной вектор нейронной сети, если указан. Также выполняет вставки в денормализованные данные. Возвращает данные в формате: input[i_ds][i_c], output[i_ds]
+    def denormalize_insert_input_vectors_sequence_output_vector(self, data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=None, output_datetime_timestamp=None):
         data_sources_normalizers_inp_seq = self.input_vectors_sequence_to_data_sources_normalizers(input_vectors_sequence) if not input_vectors_sequence is None else None
         data_sources_normalizers_out = self.output_vector_to_data_sources_normalizers(output_vector) if not output_vector is None else None
 
@@ -734,7 +728,16 @@ class DataManager:
                         output_denorm.append(0)
             data_sources_output_denorm.append(output_denorm)
 
+        if len(data_sources_output_denorm) > 0:
+            self.make_output_inserts(data_sources_output_denorm, output_datetime_timestamp)
+
         return data_sources_input_sequence_denorm, data_sources_output_denorm
+
+    def make_output_inserts(self, data_sources_output, output_datetime_timestamp):
+        for i_ds in range(len(self.data_sources_meta)):
+            data_sources_output[i_ds].insert(0, output_datetime_timestamp) # вставляем дату в 0-ю позицию
+            for i_oi in range(len(self.data_sources_meta[i_ds].output_inserts)):
+                self.data_sources_meta[i_ds].output_inserts[i_oi].make_insert(target_list=data_sources_output[i_ds], datetime_timestamp=output_datetime_timestamp, interval_milliseconds=self.interval_milliseconds)
 
     def input_vectors_sequence_to_data_sources_normalizers(self, input):
         index = 0
