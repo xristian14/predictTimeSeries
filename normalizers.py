@@ -266,6 +266,85 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
 
         return denormalized_inp_sequence_by_data_indexes, denormalized_output_by_data_indexes
 
+class InsertionBase:
+    def summary(self):
+        raise NotImplementedError(f"Не переопределен метод summary класса {self.__class__.__name__}")
+    def normalize(self):
+        raise NotImplementedError(f"Не переопределен метод normalize класса {self.__class__.__name__}")
+
+# вставляет в целевой список по индексу insert_index значение, является ли данная свечка филлером 1 (да) 0 (нет), на основе того что в америке торги идут в будние дни, с 14:00-20:00 UTC+00:00 в летнее время и с 15:00-21:00 UTC+00:00 в зимнее время, и переход на летнее время происходит во второе воскресенье марта, а на зимнее в первое воскресенье ноября. Свечка считается не торгвой если дата её середины находится в неторговом периоде. Работает с датами с 2000 по 2030
+class InsertionAmericanIsFiller(InsertionBase):
+    def __init__(self, insert_index):
+        self.insert_index = insert_index
+
+    def summary(self, **kwargs):
+        self.summer_winter_transition = {} # дни перехода на летнее и зимнее время. Первое число - день марта (на летнее), второе - день ноября (на зимнее)
+        self.summer_winter_transition[2000] = (12, 5)
+        self.summer_winter_transition[2001] = (11, 4)
+        self.summer_winter_transition[2002] = (10, 3)
+        self.summer_winter_transition[2003] = (9, 2)
+        self.summer_winter_transition[2004] = (14, 7)
+        self.summer_winter_transition[2005] = (13, 6)
+        self.summer_winter_transition[2006] = (12, 5)
+        self.summer_winter_transition[2007] = (11, 4)
+        self.summer_winter_transition[2008] = (9, 2)
+        self.summer_winter_transition[2009] = (8, 1)
+        self.summer_winter_transition[2010] = (14, 7)
+        self.summer_winter_transition[2011] = (13, 6)
+        self.summer_winter_transition[2012] = (11, 4)
+        self.summer_winter_transition[2013] = (10, 3)
+        self.summer_winter_transition[2014] = (9, 2)
+        self.summer_winter_transition[2015] = (8, 1)
+        self.summer_winter_transition[2016] = (13, 6)
+        self.summer_winter_transition[2017] = (12, 5)
+        self.summer_winter_transition[2018] = (11, 4)
+        self.summer_winter_transition[2019] = (10, 3)
+        self.summer_winter_transition[2020] = (8, 1)
+        self.summer_winter_transition[2021] = (14, 7)
+        self.summer_winter_transition[2022] = (13, 6)
+        self.summer_winter_transition[2023] = (12, 5)
+        self.summer_winter_transition[2024] = (10, 3)
+        self.summer_winter_transition[2025] = (9, 2)
+        self.summer_winter_transition[2026] = (8, 1)
+        self.summer_winter_transition[2027] = (14, 7)
+        self.summer_winter_transition[2028] = (12, 5)
+        self.summer_winter_transition[2029] = (11, 4)
+        self.summer_winter_transition[2030] = (10, 3)
+
+    def insert(self, target_list, **kwargs):
+        mid_datetime_timestamp = kwargs["datetime_timestamp"] + kwargs["interval_milliseconds"] / 2.0 # время середины свечки
+        mid_datetime = features.timestamp_to_utc_datetime(mid_datetime_timestamp)
+        if not mid_datetime.year in self.summer_winter_transition:
+            raise ValueError(f"Дата {mid_datetime} для {self.__class__.__name__} находится вне допустимого диапазона.")
+
+        is_filler = False
+        if mid_datetime.weekday() == 5 or mid_datetime.weekday() == 6:
+            is_filler = True
+        if not is_filler:
+            if mid_datetime.month > 3 and mid_datetime.month < 11:
+                is_summer = True
+            elif mid_datetime.month > 11 or mid_datetime.month < 3:
+                is_summer = False
+            elif mid_datetime.month == 3:
+                if mid_datetime.day > self.summer_winter_transition[mid_datetime.year][0]:
+                    is_summer = True
+                else:
+                    is_summer = False
+            elif mid_datetime.month == 11:
+                if mid_datetime.day < self.summer_winter_transition[mid_datetime.year][1]:
+                    is_summer = True
+                else:
+                    is_summer = False
+
+            if is_summer:
+                if not (mid_datetime.hour >= 14 and mid_datetime.hour <= 20):
+                    is_filler = True
+            else:
+                if not (mid_datetime.hour >= 15 and mid_datetime.hour <= 21):
+                    is_filler = True
+        value = 1 if is_filler else 0
+        target_list.insert(self.insert_index, value)
+
 # RelativeMinMaxScaler - нормализует данные по следующему правилу: при инициализации вычисляет множитель, на который выходное значение увеличивает диапазон значений входной последовательности, mult_high - для роста, и mult_low - для падения; при нормализации вычисляет диапазон значений во входной последовательности (max, min, range = max - min), прибавляет к max: range * mult_high, а из min вычитает: range * mult_low, затем нормализует данные в диапазоне от min до max
 class RelativeMinMaxScaler(NormalizerBase, MinMaxScalerBase):
     # data_indexes - индексы значений в data_source, для которых будет выполняться нормализация

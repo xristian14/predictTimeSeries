@@ -90,6 +90,9 @@ data_sources_meta = [
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
         ], date_index = 0, data_indexes_in_file = [1,2,3,4,5,11], losses_data_indexes=[1,2,3,4], is_save_data=True,
+        output_inserts=[
+
+        ],
         normalizers=[
             normalizers.DateTimeOneHotVector(data_indexes=[0], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1, is_month=False, is_day_of_week=True, is_day=False, is_hour=False),
             normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1,2,3,4], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[2416], is_auto_over_rate_low=True, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
@@ -99,7 +102,10 @@ data_sources_meta = [
     features.DataSourceMeta(files=[
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/TIINGO SPY 1Hour 2017-10-10 16h 00m - 2023-03-31 19h 00m (SNP500 ETF) _0-1000.csv",
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/TIINGO SPY 1Hour 2017-10-10 16h 00m - 2023-03-31 19h 00m (SNP500 ETF) _600-1600.csv"
-        ], date_index = 0, data_indexes_in_file = [1,2,3,4,6], is_save_data=True,
+        ], date_index = 0, data_indexes_in_file = [1,2,3,4,6], losses_data_indexes=[1,2,3,4], is_save_data=True,
+        output_inserts=[
+            normalizers.InsertionAmericanIsFiller(insert_index=6)
+        ],
         normalizers=[
             normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1, 2, 3, 4], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[154], is_auto_over_rate_low=True, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
             normalizers.SameValuesNoOutput(data_indexes=[5], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1)

@@ -107,12 +107,13 @@ class Period:
         self.model = model
 
 class DataSourceMeta:
-    def __init__(self, files, date_index, data_indexes_in_file, losses_data_indexes, is_save_data, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
+    def __init__(self, files, date_index, data_indexes_in_file, losses_data_indexes, is_save_data, output_inserts, normalizers, visualize, is_visualize, visualize_ratio, visualize_name, visualize_data_source_panel = 1):
         self.files = files # список с файлами
         self.date_index = date_index # индекс даты
         self.data_indexes_in_file = data_indexes_in_file # индексы данных, которые нужно считать из файла
         self.losses_data_indexes = losses_data_indexes # индексы считанных данных, для которых будет вычисляться ошибка для данного источника данных
         self.is_save_data = is_save_data # сохранять ли спрогнозированные данные для данного источника данных
+        self.output_inserts = output_inserts # список с вставками для выходного вектора. Нужен чтобы добавлять в выходной вектор элементы, которые не были спрогнозированы нейронной сетью, и значение которых известно или вычисляемо
         self.normalizers = normalizers # список с нормализаторами для источника данных
         self.visualize = visualize # список с панелями которые будут созданы для отображения источника данных. Элементы списка: ("type", [data_indexes]), type может быть: "candle", "line". Для "candle" может быть передано или 4 или 2 индекса данных, для "line" может быть передан только один индекс данных. Пример графиков цены и объема: [("candle", [1,2,3,4]), ("line", [5])]
         self.is_visualize = is_visualize # нужно ли визуализировать источник данных
@@ -237,6 +238,11 @@ class DataManager:
         for i_ds in range(len(data_sources_meta)):
             for i_n in range(len(data_sources_meta[i_ds].normalizers)):
                 data_sources_meta[i_ds].normalizers[i_n].summary(self.data_sources[i_ds], self.sequence_length)
+
+        # выполняем подготовку вставок в выходные данные
+        for i_ds in range(len(data_sources_meta)):
+            for i_oi in range(len(data_sources_meta[i_ds].output_inserts)):
+                data_sources_meta[i_ds].output_inserts[i_oi].summary()
 
         self.periods_process()
 
