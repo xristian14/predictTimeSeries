@@ -77,11 +77,11 @@ part_learn_predict = 0.01 # часть от учебных данных для �
 part_test_predict = 0.1 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_learn_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
 part_test_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
-learn_predict_visualize_one_step_limit = 3 # максимальное количество визуализаций прогнозирования на один шаг вперед для учебного периода
-test_predict_visualize_one_step_limit = 3 # максимальное количество визуализаций прогнозирования на один шаг вперед для тестового периода
+learn_predict_visualize_one_step_limit = 999 # максимальное количество визуализаций прогнозирования на один шаг вперед для учебного периода
+test_predict_visualize_one_step_limit = 999 # максимальное количество визуализаций прогнозирования на один шаг вперед для тестового периода
 is_visualize_prediction_union = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Все источники данных будут на одном изображении. Данная визуализация будет выполнена только если количество визуализируемых источников данных будет больше 1.
 is_visualize_prediction_single = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Каждый источник данных будет на собственном изображении.
-visualize_prediction_cut = 300 # до какой длины обрезать визуализируемые данные. Чтобы если длина последовательности и длина предсказания большие, можно было понять как предсказание корелирует с истинными данными. Независимо от данного значения, визуализированы будут все данные предсказания.
+visualize_prediction_cut = 500 # до какой длины обрезать визуализируемые данные. Чтобы если длина последовательности и длина предсказания большие, можно было понять как предсказание корелирует с истинными данными. Независимо от данного значения, визуализированы будут все данные предсказания.
 is_save_predict_data = False # сохранять ли спрогнозированные данные. Когда True, part_learn_predict и part_test_predict не будут иметь значения, т.к. выполнится прогнозирование для всех данных. part_learn_predict_visualize будет иметь значение, и будет составлять часть от всех обучающих данных, то же самое для тестовых
 over_rate = 0.2 # подставляю это значение в параметр нормализаторов, определяет насколько больше будет диапазон нормализации относительно формата: вплотную, 0.1 - на 10% больше
 # data_indexes_in_file в инициализаторе DataSourceMeta - это индексы, по которым будут браться данные из файла. data_indexes в инициализаторе нормализаторов - это индексы считанных данных из файла, то есть такой код: DataSourceMeta(data_indexes_in_file = [1,11]) считает 2 значения из файла, по индексам 1 и 11, чтобы использовать далее эти занчения в номрализаторе следует написать: normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1,2]). По 0 индексу располагается дата данных, поэтому его следует указывать лишь для специальных нормализаторов, например: normalizers.DateTimeOneHotVector(data_indexes=[0])
@@ -89,6 +89,19 @@ data_sources_meta = [
     features.DataSourceMeta(files=[
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
             "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT BTCUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
+        ], date_index = 0, data_indexes_in_file = [1,2,3,4,5,11], losses_data_indexes=[1,2,3,4], is_save_data=True,
+        output_inserts=[
+            normalizers.InsertionFixedValue(insert_index=6, value=0)
+        ],
+        normalizers=[
+            normalizers.DateTimeOneHotVector(data_indexes=[0], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1, is_month=False, is_day_of_week=True, is_day=False, is_hour=False),
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1,2,3,4], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[2416], is_auto_over_rate_low=True, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
+            normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[5], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=0.05, over_rate_high=over_rate, add_values=[-100], is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
+            normalizers.SameValuesNoOutput(data_indexes=[6], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1)
+        ], visualize=[("candle", [1,2,3,4]), ("line", [5])], is_visualize=True, visualize_ratio=[3,1], visualize_name=["price", "volume"]),
+    features.DataSourceMeta(files=[
+            "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _0-1000.csv",
+            "C:/Users/Христиан/PycharmProjects/fileProcessing/fill_files 2017-10-10 16h 00m - 2023-03-31 23h 00m/BINANCE SPOT ETHUSDT 1h 2017-08-17 04h 00m - 2023-03-31 23h 00m _600-1600.csv"
         ], date_index = 0, data_indexes_in_file = [1,2,3,4,5,11], losses_data_indexes=[1,2,3,4], is_save_data=True,
         output_inserts=[
             normalizers.InsertionFixedValue(insert_index=6, value=0)
@@ -109,7 +122,7 @@ data_sources_meta = [
         normalizers=[
             normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1, 2, 3, 4], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[154], is_auto_over_rate_low=True, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
             normalizers.SameValuesNoOutput(data_indexes=[5], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1)
-        ], visualize=[("candle", [1,2,3,4])], is_visualize=True, visualize_ratio=[3], visualize_name=["price"])
+        ], visualize=[("candle", [1,2,3,4])], is_visualize=True, visualize_ratio=[1], visualize_name=["price"])
 ]
 
 loaded_models = []
@@ -124,11 +137,11 @@ if is_load_models:
 is_generate_periods = True # генерировать периоды, или использовать указанные в списке periods
 periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
 periods_generator_start = features.DateTime(year=2017, month=10, day=18)
-periods_generator_learning_duration = features.Duration(years=0, months=0, days=14)
-periods_generator_testing_duration = features.Duration(years=0, months=0, days=5)
+periods_generator_learning_duration = features.Duration(years=0, months=0, days=50)
+periods_generator_testing_duration = features.Duration(years=0, months=0, days=7)
 periods_generator_model_learn_count = 1 # сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
 periods_generator_model_desired_loss = 0 # желаемая ошибка для best_model_criteria, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
-periods_generator_count = 5 # количество периодов
+periods_generator_count = 1 # количество периодов
 
 if is_generate_periods:
     periods = []
@@ -149,6 +162,8 @@ else:
     ]
 
 data_manager = features.DataManager(data_sources_meta, validation_split, sequence_length, predict_length, part_learn_predict, part_test_predict, part_learn_predict_visualize, part_test_predict_visualize, learn_predict_visualize_one_step_limit, test_predict_visualize_one_step_limit, is_visualize_prediction_union, is_visualize_prediction_single, visualize_prediction_cut, is_save_predict_data, periods)
+
+sys.exit()
 
 model = Sequential()
 model.add(Input((sequence_length, len(data_manager.x_learn[0][0]))))

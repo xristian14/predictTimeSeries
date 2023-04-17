@@ -394,7 +394,7 @@ class DataManager:
         data_sources_y_predict_period = []
         number = 0
         print(f"{progress_label} {number}%")
-        number += 10
+        number += 20
         for i in range(len(x_period)):
             x_np = np.array(x_period[i])
             inp = x_np.reshape(1, self.sequence_length, len(x_period[i][0]))
@@ -405,7 +405,7 @@ class DataManager:
             data_sources_y_predict_period.append(data_sources_output_denorm)
             if i / (len(x_period) - 1) >= number / 100:
                 print(f"{progress_label} {number}%")
-                number += 10
+                number += 20
 
         return (data_sources_y_predict_period, file_candle_indexes_period)
 
@@ -435,16 +435,17 @@ class DataManager:
 
             if len(data_sources_true[0]) >= self.visualize_prediction_cut or i == len(data_sources_y_predict) - 1:
                 if self.is_visualize_prediction_union and len(visualize_data_sources_indexes) > 1:
-                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}")
+                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
 
                 if self.is_visualize_prediction_single:
                     i_ds = 0
                     for i_visual_ds in visualize_data_sources_indexes:
-                        self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_file_names[i_visual_ds][:len(self.data_sources_file_names[i_visual_ds]) - 4]} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}")
+                        self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_file_names[i_visual_ds][0][:len(self.data_sources_file_names[i_visual_ds][0]) - 4]} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
                         i_ds += 1
 
-                del data_sources_true[:]
-                del data_sources_predict[:]
+                for i_ds2 in range(len(data_sources_true)):
+                    del data_sources_true[i_ds2][:]
+                    del data_sources_predict[i_ds2][:]
                 visualize_start_timestamp = None
                 visualize_count += 1
                 if visualize_count >= visualize_one_step_limit:
@@ -798,7 +799,8 @@ class DataManager:
         y_over_rate = 0.02 # отступ от верхнего и нижнего края
         for i in range(len(data_sources_predict[0])):
             if len(data_sources_predict[0][i]) > 1:
-                where_values_end_inp_seq[i - 1] = True
+                if i - 1 > 0:
+                    where_values_end_inp_seq[i - 1] = True
                 break
         for i_ds in range(len(data_sources_true) - 1, -1, -1):
             i_visual_ds = visualize_data_sources_indexes[i_ds]
@@ -907,7 +909,7 @@ class DataManager:
                         add_plot.append(mpf.make_addplot(p_data_true, type='line', panel=panel_num, fill_between=[dict_end_inp_seq], ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
                         add_plot.append(mpf.make_addplot(p_data_predict, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="springgreen"))
 
-        myrcparams = {'axes.labelsize': 'small'}
+        myrcparams = {'axes.labelsize': 'x-small'}
         my_style = mpf.make_mpf_style(base_mpf_style='yahoo', facecolor='white', y_on_right=False, rc=myrcparams)
         panel_ratios = ()
         for i_ds in range(len(data_sources_true)):
