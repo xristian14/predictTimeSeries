@@ -467,6 +467,9 @@ class DataManager:
         current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
 
         data_sources_y_predict = []
+        for i_ds in range(len(self.data_sources)):
+            data_sources_y_predict.append([])
+        file_candle_indexes = [] # содержит индекс выходной свечки для первой входной последовательности
         number = 0
         print(f"{progress_label} {number}%")
         number += 10
@@ -495,7 +498,6 @@ class DataManager:
                     data_sources_inp_seq = []
                     true_data_length = max(self.sequence_length - i_p, 0)  # количество данных которые нужно взять из источников данных
                     predict_data_length = self.sequence_length - true_data_length  # количество данных которые нужно взять из спрогнозированных данных
-                    yy = 0
                     for i_ds in range(len(self.data_sources)):
                         data_source_inp_seq = []
                         for i_seq in range(i_c - self.sequence_length + i_p + 1, i_c - self.sequence_length + i_p + 1 + true_data_length):
@@ -524,8 +526,10 @@ class DataManager:
                     for i_ds_pr in range(len(self.data_sources)):
                         data_sources_y_predict_current[i_ds_pr].append(data_sources_output_denorm[i_ds_pr])
 
+
                 for i_ds in range(len(self.data_sources)):
-                    data_sources_y_predict.append(data_sources_y_predict_current[i_ds])
+                    data_sources_y_predict[i_ds].append(data_sources_y_predict_current[i_ds])
+                file_candle_indexes.append((i_f, i_c + 1))
 
             if (current_datetime_timestamp - datetime_start_timestamp) / (datetime_end_timestamp - datetime_start_timestamp) >= number / 100:
                 print(f"{progress_label} {number}%")
@@ -538,7 +542,7 @@ class DataManager:
                     i_f += 1
             current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
 
-        return data_sources_y_predict
+        return data_sources_y_predict, file_candle_indexes
 
     def handle_period(self, period):
         self.create_period_folders(period)
@@ -605,7 +609,29 @@ class DataManager:
 
         mean_absolute_percentage_error_epsilon = 0.3
 
-        data_sources_y_predict_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "Прогнозирование на несколько шагов вперед для учебных данных:")
+        data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "Прогнозирование на несколько шагов вперед для учебных данных:")
+        mean_absolute_percentage_error_learn_multi_step_sum_single = [0] * len(self.data_sources)
+        learn_multi_step_count = 0 # количество подсчитанных спрогнозированных последовательностей. Если истинных данных нет (например прогноз для последних данных) то расчет ошибки для этого прогноза делаться не будет.
+        if len(data_sources_y_predict_multi_step_learn) > 0:
+            for i in range(len(data_sources_y_predict_multi_step_learn[0])):
+                i_f, i_c = file_candle_indexes_multi_step_learn[i]
+                if i_c + self.predict_length < len(self.data_sources[0][i_f]):
+                    for i_pred in range(self.predict_length):
+                        i_c_curr = i_c + i_pred
+                        for i_ds in range(len(self.data_sources)):
+                            mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step_learn[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
+                            mean_absolute_percentage_error_learn_multi_step_sum_single[i_ds] += mean_absolute_percentage_error
+                    learn_multi_step_count += 1
+        if learn_multi_step_count > 0:
+            self.is_mean_absolute_percentage_error_learn_multi_step = True
+            period.mean_absolute_percentage_error_learn_multi_step_single = [0] * len(self.data_sources)
+            for i_ds in range(len(self.data_sources)):
+                period.mean_absolute_percentage_error_learn_multi_step_single[i_ds] = mean_absolute_percentage_error_learn_multi_step_sum_single[i_ds] / learn_multi_step_count / self.predict_length
+            period.mean_absolute_percentage_error_learn_multi_step_join = sum(period.mean_absolute_percentage_error_learn_multi_step_single) / len(self.data_sources)
+        else:
+            self.is_mean_absolute_percentage_error_learn_multi_step = False
+
+
 
 
 

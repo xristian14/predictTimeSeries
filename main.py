@@ -71,8 +71,8 @@ from tensorflow.keras.optimizers import Adam
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 validation_split = 0.05 # размер данных для валидации относительно всех данных
-sequence_length = 200 # длина последовательных данных для которых делается прогноз следующего значения
-predict_length = 24 # количество шагов на которое будут спрогнозированы данные
+sequence_length = 100 # длина последовательных данных для которых делается прогноз следующего значения
+predict_length = 5 # количество шагов на которое будут спрогнозированы данные
 part_learn_predict = 0.01 # часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_test_predict = 0.1 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_learn_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
@@ -133,7 +133,7 @@ if is_load_models:
 is_generate_periods = True # генерировать периоды, или использовать указанные в списке periods
 periods_generator_is_load_models = False # использовать в периодах загруженные модели в loaded_models, будут подставляться модели с индексами от 0 до periods_generator_count
 periods_generator_start = features.DateTime(year=2017, month=11, day=1)
-periods_generator_learning_duration = features.Duration(years=0, months=1, days=0)
+periods_generator_learning_duration = features.Duration(years=0, months=0, days=5)
 periods_generator_testing_duration = features.Duration(years=0, months=0, days=7)
 periods_generator_model_learn_count = 1 # сколько раз нужно обучать модель с новой начальной инициализацией, будет выбрана модель с наименьшей ошибкой
 periods_generator_model_desired_loss = 0 # желаемая ошибка для best_model_criteria, если ошибка модели будет меньше или равна данному значению, дополнительные обучения проводиться не будут
