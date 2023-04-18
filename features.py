@@ -455,6 +455,91 @@ class DataManager:
                 break
             i += 1
 
+    def predict_multi_step(self, period, datetime_start_timestamp, datetime_end_timestamp, probability_predict, progress_label):
+        # доходим до первой свечки начала периода
+        i_f = 0
+        i_c = 0
+        while self.data_sources[0][i_f][i_c][0] < datetime_start_timestamp:
+            i_c += 1
+            if i_c >= len(self.data_sources[0][i_f]):
+                i_c = 0
+                i_f += 1
+        current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+
+        data_sources_y_predict = []
+        number = 0
+        print(f"{progress_label} {number}%")
+        number += 10
+
+        while current_datetime_timestamp <= datetime_end_timestamp:
+            is_let_in = False
+            if self.is_save_predict_data:
+                is_let_in = True
+            else:
+                rand = random.random()
+                if rand <= probability_predict:
+                    is_let_in = True
+
+            if is_let_in:
+                data_sources_y_predict_current = []
+                for i_ds_pr in range(len(self.data_sources)):
+                    data_sources_y_predict_current.append([])
+
+                elapsed_create_inp_seq = 0
+                elapsed_normalize = 0
+                elapsed_predict = 0
+
+                for i_p in range(self.predict_length):
+                    # формируем входную последовательность для всех источников данных
+                    time_create_inp_seq_start = time.process_time()
+                    data_sources_inp_seq = []
+                    true_data_length = max(self.sequence_length - i_p, 0)  # количество данных которые нужно взять из источников данных
+                    predict_data_length = self.sequence_length - true_data_length  # количество данных которые нужно взять из спрогнозированных данных
+                    yy = 0
+                    for i_ds in range(len(self.data_sources)):
+                        data_source_inp_seq = []
+                        for i_seq in range(i_c - self.sequence_length + i_p + 1, i_c - self.sequence_length + i_p + 1 + true_data_length):
+                            data_source_inp_seq.append(copy.deepcopy(self.data_sources[i_ds][i_f][i_seq]))
+                        for i_seq in range(i_p - predict_data_length, i_p):
+                            data_source_inp_seq.append(copy.deepcopy(data_sources_y_predict_current[i_ds][i_seq]))
+                        data_sources_inp_seq.append(data_source_inp_seq)
+
+                    elapsed_create_inp_seq += time.process_time() - time_create_inp_seq_start
+                    time_normalize_start = time.process_time()
+                    x, y, data_sources_normalizers_settings = self.normalize_data_sources(output_i_f=i_f, output_i_c=i_c, data_sources_inp_seq=data_sources_inp_seq, data_sources_add_candles=data_sources_y_predict_current, data_sources_output=None)
+                    elapsed_normalize += time.process_time() - time_normalize_start
+                    x_np = np.array(x)
+                    inp = x_np.reshape(1, self.sequence_length, len(x[0]))
+                    time_predict_start = time.process_time()
+                    pred = period.model.predict(inp, verbose=0)
+                    elapsed_predict += time.process_time() - time_predict_start
+                    output_vector = pred[0].tolist()
+
+                    if predict_data_length > 0:
+                        output_datetime_timestamp = data_sources_y_predict_current[i_ds][-1][0] + self.interval_milliseconds
+                    else:
+                        output_datetime_timestamp = self.data_sources[i_ds][i_f][i_c][0] + self.interval_milliseconds
+                    data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_insert_input_vectors_sequence_output_vector(data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=output_vector, output_datetime_timestamp=output_datetime_timestamp)
+
+                    for i_ds_pr in range(len(self.data_sources)):
+                        data_sources_y_predict_current[i_ds_pr].append(data_sources_output_denorm[i_ds_pr])
+
+                for i_ds in range(len(self.data_sources)):
+                    data_sources_y_predict.append(data_sources_y_predict_current[i_ds])
+
+            if (current_datetime_timestamp - datetime_start_timestamp) / (datetime_end_timestamp - datetime_start_timestamp) >= number / 100:
+                print(f"{progress_label} {number}%")
+                number += 10
+
+            while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
+                i_c += 1
+                if i_c >= len(self.data_sources[0][i_f]):
+                    i_c = 0
+                    i_f += 1
+            current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
+
+        return data_sources_y_predict
+
     def handle_period(self, period):
         self.create_period_folders(period)
 
@@ -481,7 +566,7 @@ class DataManager:
                 model.compile(loss=tf.losses.MeanSquaredError(), metrics=[tf.metrics.MeanAbsoluteError()], optimizer='adam')
                 # "binary_crossentropy" tf.keras.losses.MeanAbsolutePercentageError()
 
-                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=40, validation_data=(np.array(x_valid), np.array(y_valid)))
+                history = model.fit(np.array(x_learn), np.array(y_learn), batch_size=32, epochs=30, validation_data=(np.array(x_valid), np.array(y_valid)))
 
                 fig_w = 6
                 fig_h = 5
@@ -490,7 +575,7 @@ class DataManager:
                 plt.plot(history.history['loss'])
                 plt.plot(history.history['val_loss'])
                 plt.show()
-                if len(history.history['loss']) > 12:
+                if len(history.history['loss']) > 9:
                     plt.figure(figsize=(fig_w, fig_h))
                     plt.title(f"{period.learning_start.date_time.strftime('%Y-%m-%d %Hh %Mm')} - {period.testing_end.date_time.strftime('%Y-%m-%d %Hh %Mm')} [7:] _{i + 1}")
                     plt.plot(history.history['loss'][7:])
@@ -519,6 +604,11 @@ class DataManager:
             raise ValueError(error_messages[0])
 
         mean_absolute_percentage_error_epsilon = 0.3
+
+        data_sources_y_predict_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "Прогнозирование на несколько шагов вперед для учебных данных:")
+
+
+
         # прогнозирую учебный период на одну свечку вперед, и вычисляю ошибку к истинным данным
         data_sources_y_predict_learn, file_candle_indexes_learn = self.predict_one_step(period, learning_start_timestamp, learning_end_timestamp, "Прогнозирование на один шаг вперед для учебных данных:")
         mean_absolute_percentage_error_learn_one_step_sum_single = [0] * len(self.data_sources)
@@ -595,7 +685,7 @@ class DataManager:
             self.handle_period(self.periods[i])
 
     # нормализует последовательность свечек для всех источников данных, и выходные свечки для всех источников данных, если указаны. Возвращает последовательность входных векторов нейронной сети, и выходной вектор нейронной сети, если указан, и настройки нормализации вида settings[i_ds][i_normalize]. output_i_f, output_i_c - индексы
-    def normalize_data_sources(self, output_i_f, output_i_c, data_sources_inp_seq, data_sources_output=None):
+    def normalize_data_sources(self, output_i_f, output_i_c, data_sources_inp_seq, data_sources_add_candles = [], data_sources_output=None):
         data_sources_normalizers_inp_seq = []
         data_sources_normalizers_out = []
         data_sources_normalizers_settings = []
@@ -605,7 +695,7 @@ class DataManager:
             normalizers_out = []
             normalizers_settings = []
             for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
-                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(data_sources_inp_seq[i_ds], data_sources_output[i_ds], output_i_f=output_i_f, output_i_c=output_i_c)
+                x, y, n_setting = self.data_sources_meta[i_ds].normalizers[i_n].normalize(inp_sequence=data_sources_inp_seq[i_ds], output=data_sources_output[i_ds] if not data_sources_output is None else None, output_i_f=output_i_f, output_i_c=output_i_c, add_candles=data_sources_add_candles[i_ds] if len(data_sources_add_candles) > 0 else [])
                 normalizers_inp_seq.append(x)
                 normalizers_out.append(y)
                 normalizers_settings.append(n_setting)
@@ -627,8 +717,6 @@ class DataManager:
             for i_ds in range(len(data_sources_normalizers_out)):
                 for i_n in range(len(data_sources_normalizers_out[i_ds])):
                     finally_output.extend(data_sources_normalizers_out[i_ds][i_n])
-
-        data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_insert_input_vectors_sequence_output_vector(data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=finally_output, output_datetime_timestamp=self.data_sources[0][output_i_f][output_i_c][0])
 
         return finally_inp_seq, finally_output, data_sources_normalizers_settings
 

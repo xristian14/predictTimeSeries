@@ -221,13 +221,14 @@ class DynamicAbsoluteMinMaxScaler(NormalizerBase, MinMaxScalerBase):
         range_min = self.data_source_settings[kwargs["output_i_f"]][kwargs["output_i_c"] - 1].range_min
         range_max = self.data_source_settings[kwargs["output_i_f"]][kwargs["output_i_c"] - 1].range_max
         if "add_candles" in kwargs:
-            add_range_min = min([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
-            add_range_max = max([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
-            for i in range(len(kwargs["add_candles"])):
-                add_range_min = min(add_range_min, min([kwargs["add_candles"][i][data_index] for data_index in self.data_indexes]))
-                add_range_max = max(add_range_max, max([kwargs["add_candles"][i][data_index] for data_index in self.data_indexes]))
-            range_min = min(range_min, add_range_min)
-            range_max = max(range_max, add_range_max)
+            if len(kwargs["add_candles"]) > 0:
+                add_range_min = min([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
+                add_range_max = max([kwargs["add_candles"][0][data_index] for data_index in self.data_indexes])
+                for i in range(len(kwargs["add_candles"])):
+                    add_range_min = min(add_range_min, min([kwargs["add_candles"][i][data_index] for data_index in self.data_indexes]))
+                    add_range_max = max(add_range_max, max([kwargs["add_candles"][i][data_index] for data_index in self.data_indexes]))
+                range_min = min(range_min, add_range_min)
+                range_max = max(range_max, add_range_max)
         range_min_max = range_max - range_min
         range_min_over_rated = range_min - range_min_max * self.over_rate_low
         range_max_over_rated = range_max + range_min_max * self.over_rate_high
