@@ -260,7 +260,7 @@ class DataManager:
         total_count = round((self.periods_end_timestamp - self.periods_start_timestamp) / self.interval_milliseconds)
         number = 0
         print(f"Создание входных последовательностей: {number}%")
-        number += 5
+        number += 10
         # создаю список, заполненный None, размерностью self.data_sources[0]
         self.data_sources_periods_x_y = [[None] * len(self.data_sources[0][i_f]) for i_f in range(len(self.data_sources[0]))]
         # доходим до первой свечки начала периодов
@@ -278,9 +278,9 @@ class DataManager:
             x, y, data_sources_normalizers_settings = self.normalize_data_sources(output_i_f=i_f, output_i_c=i_c, data_sources_inp_seq=data_sources_inp_seq, data_sources_output=data_sources_output)
             self.data_sources_periods_x_y[i_f][i_c] = (x, y, data_sources_normalizers_settings)
 
-            if ((current_datetime_timestamp - self.periods_start_timestamp) / self.interval_milliseconds) / total_count >= number / 100:
+            if (current_datetime_timestamp - self.periods_start_timestamp) / (self.periods_end_timestamp - self.periods_start_timestamp) >= number / 100:
                 print(f"Создание входных последовательностей: {number}%")
-                number += 5
+                number += 10
 
             while self.data_sources[0][i_f][i_c][0] <= current_datetime_timestamp:
                 i_c += 1
@@ -409,6 +409,21 @@ class DataManager:
                 number += 20
 
         return (data_sources_y_predict_period, file_candle_indexes_period)
+
+    def loss_one_step(self, data_sources_y_predict, file_candle_indexes):
+        mean_absolute_percentage_error_one_step_sum_single = [0] * len(self.data_sources)
+        for i in range(len(data_sources_y_predict)):
+            i_f, i_c = file_candle_indexes[i]
+            for i_ds in range(len(self.data_sources)):
+                mean_absolute_percentage_error = sum([abs(
+                    self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict[i][i_ds][data_index]) / (self.data_sources[i_ds][i_f][i_c][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
+                mean_absolute_percentage_error_one_step_sum_single[i_ds] += mean_absolute_percentage_error
+
+        mean_absolute_percentage_error_one_step_single = [0] * len(self.data_sources)
+        for i_ds in range(len(self.data_sources)):
+            mean_absolute_percentage_error_one_step_single[i_ds] = mean_absolute_percentage_error_one_step_sum_single[i_ds] / len(data_sources_y_predict)
+        mean_absolute_percentage_error_one_step_join = sum(mean_absolute_percentage_error_one_step_single) / len(self.data_sources)
+        return mean_absolute_percentage_error_one_step_single, mean_absolute_percentage_error_one_step_join
 
     def visualize_one_step(self, save_image_folder, data_sources_y_predict, file_candle_indexes, visualize_one_step_limit):
         data_sources_true = []
@@ -544,6 +559,36 @@ class DataManager:
 
         return data_sources_y_predict, file_candle_indexes
 
+    def loss_multi_step(self, data_sources_y_predict_multi_step, file_candle_indexes_multi_step):
+        mean_absolute_percentage_error_multi_step_sum_single = [0] * len(self.data_sources)
+        multi_step_count = 0  # количество подсчитанных спрогнозированных последовательностей. Если истинных данных нет (например прогноз для последних данных) то расчет ошибки для этого прогноза делаться не будет.
+        if len(data_sources_y_predict_multi_step) > 0:
+            for i in range(len(data_sources_y_predict_multi_step[0])):
+                i_f, i_c = file_candle_indexes_multi_step[i]
+                if i_c + self.predict_length < len(self.data_sources[0][i_f]):
+                    for i_pred in range(self.predict_length):
+                        i_c_curr = i_c + i_pred
+                        for i_ds in range(len(self.data_sources)):
+                            mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
+                            true_candle = self.data_sources[i_ds][i_f][i_c_curr]
+                            pred_candle = data_sources_y_predict_multi_step[i_ds][i][i_pred]
+                            if i_pred == 4:
+                                yy = 0
+                            mean_absolute_percentage_error_multi_step_sum_single[i_ds] += mean_absolute_percentage_error
+                    multi_step_count += 1
+
+        mean_absolute_percentage_error_multi_step_single = None
+        mean_absolute_percentage_error_multi_step_join = None
+        if multi_step_count > 0:
+            is_mean_absolute_percentage_error_multi_step = True
+            mean_absolute_percentage_error_multi_step_single = [0] * len(self.data_sources)
+            for i_ds in range(len(self.data_sources)):
+                mean_absolute_percentage_error_multi_step_single[i_ds] = mean_absolute_percentage_error_multi_step_sum_single[i_ds] / multi_step_count / self.predict_length
+            mean_absolute_percentage_error_multi_step_join = sum(mean_absolute_percentage_error_multi_step_sum_single) / len(self.data_sources)
+        else:
+            is_mean_absolute_percentage_error_multi_step = False
+        return is_mean_absolute_percentage_error_multi_step, mean_absolute_percentage_error_multi_step_single, mean_absolute_percentage_error_multi_step_join
+
     def handle_period(self, period):
         self.create_period_folders(period)
 
@@ -607,56 +652,61 @@ class DataManager:
                 print(message)
             raise ValueError(error_messages[0])
 
-        mean_absolute_percentage_error_epsilon = 0.3
+        self.mean_absolute_percentage_error_epsilon = 0.3
 
-        data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "Прогнозирование на несколько шагов вперед для учебных данных:")
-        mean_absolute_percentage_error_learn_multi_step_sum_single = [0] * len(self.data_sources)
-        learn_multi_step_count = 0 # количество подсчитанных спрогнозированных последовательностей. Если истинных данных нет (например прогноз для последних данных) то расчет ошибки для этого прогноза делаться не будет.
-        if len(data_sources_y_predict_multi_step_learn) > 0:
-            for i in range(len(data_sources_y_predict_multi_step_learn[0])):
-                i_f, i_c = file_candle_indexes_multi_step_learn[i]
-                if i_c + self.predict_length < len(self.data_sources[0][i_f]):
-                    for i_pred in range(self.predict_length):
-                        i_c_curr = i_c + i_pred
-                        for i_ds in range(len(self.data_sources)):
-                            mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step_learn[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
-                            mean_absolute_percentage_error_learn_multi_step_sum_single[i_ds] += mean_absolute_percentage_error
-                    learn_multi_step_count += 1
-        if learn_multi_step_count > 0:
-            self.is_mean_absolute_percentage_error_learn_multi_step = True
-            period.mean_absolute_percentage_error_learn_multi_step_single = [0] * len(self.data_sources)
-            for i_ds in range(len(self.data_sources)):
-                period.mean_absolute_percentage_error_learn_multi_step_single[i_ds] = mean_absolute_percentage_error_learn_multi_step_sum_single[i_ds] / learn_multi_step_count / self.predict_length
-            period.mean_absolute_percentage_error_learn_multi_step_join = sum(period.mean_absolute_percentage_error_learn_multi_step_single) / len(self.data_sources)
-        else:
-            self.is_mean_absolute_percentage_error_learn_multi_step = False
+        # прогнозирование на несколько шагов для учебных и тестовых данных и вычисление ошибки
+        data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "1/4 Прогнозирование на несколько шагов вперед для учебных данных:")
+        is_mean_absolute_percentage_error_multi_step_learn, mean_absolute_percentage_error_multi_step_learn_single, mean_absolute_percentage_error_multi_step_learn_join = self.loss_multi_step(data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn)
+        period.is_mean_absolute_percentage_error_multi_step_learn = is_mean_absolute_percentage_error_multi_step_learn
+        if is_mean_absolute_percentage_error_multi_step_learn:
+            period.mean_absolute_percentage_error_multi_step_learn_single = mean_absolute_percentage_error_multi_step_learn_single
+            period.mean_absolute_percentage_error_multi_step_learn_join = mean_absolute_percentage_error_multi_step_learn_join
 
+        data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test = self.predict_multi_step(period, testing_start_timestamp, testing_end_timestamp, self.part_test_predict, "2/4 Прогнозирование на несколько шагов вперед для тестовых данных:")
+        is_mean_absolute_percentage_error_multi_step_test, mean_absolute_percentage_error_multi_step_test_single, mean_absolute_percentage_error_multi_step_test_join = self.loss_multi_step(data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test)
+        period.is_mean_absolute_percentage_error_multi_step_test = is_mean_absolute_percentage_error_multi_step_test
+        if is_mean_absolute_percentage_error_multi_step_test:
+            period.mean_absolute_percentage_error_multi_step_test_single = mean_absolute_percentage_error_multi_step_test_single
+            period.mean_absolute_percentage_error_multi_step_test_join = mean_absolute_percentage_error_multi_step_test_join
 
+        if not self.is_save_predict_data:
+            print("Сохранение спрогнозированных данных отключено.")
 
+        # прогнозирование на один шаг для учебных и тестовых данных и вычисление ошибки
+        data_sources_y_predict_one_step_learn, file_candle_indexes_one_step_learn = self.predict_one_step(period, learning_start_timestamp, learning_end_timestamp, "3/4 Прогнозирование на один шаг вперед для учебных данных:")
+        mean_absolute_percentage_error_one_step_learn_single, mean_absolute_percentage_error_one_step_learn_join = self.loss_one_step(data_sources_y_predict_one_step_learn, file_candle_indexes_one_step_learn)
+        period.mean_absolute_percentage_error_one_step_learn_single = mean_absolute_percentage_error_one_step_learn_single
+        period.mean_absolute_percentage_error_one_step_learn_join = mean_absolute_percentage_error_one_step_learn_join
 
+        data_sources_y_predict_one_step_test, file_candle_indexes_one_step_test = self.predict_one_step(period, testing_start_timestamp, testing_end_timestamp, "4/4 Прогнозирование на один шаг вперед для тестовых данных:")
+        mean_absolute_percentage_error_one_step_test_single, mean_absolute_percentage_error_one_step_test_join = self.loss_one_step(data_sources_y_predict_one_step_test, file_candle_indexes_one_step_test)
+        period.mean_absolute_percentage_error_one_step_test_single = mean_absolute_percentage_error_one_step_test_single
+        period.mean_absolute_percentage_error_one_step_test_join = mean_absolute_percentage_error_one_step_test_join
 
-        # прогнозирую учебный период на одну свечку вперед, и вычисляю ошибку к истинным данным
-        data_sources_y_predict_learn, file_candle_indexes_learn = self.predict_one_step(period, learning_start_timestamp, learning_end_timestamp, "Прогнозирование на один шаг вперед для учебных данных:")
-        mean_absolute_percentage_error_learn_one_step_sum_single = [0] * len(self.data_sources)
-        for i in range(len(data_sources_y_predict_learn)):
-            i_f, i_c = file_candle_indexes_learn[i]
-            for i_ds in range(len(self.data_sources)):
-                mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict_learn[i][i_ds][data_index]) / (self.data_sources[i_ds][i_f][i_c][data_index] + mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
-                mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] += mean_absolute_percentage_error
+        print(f"period.is_mean_absolute_percentage_error_multi_step_learn={period.is_mean_absolute_percentage_error_multi_step_learn}")
+        if period.is_mean_absolute_percentage_error_multi_step_learn:
+            print(f"period.mean_absolute_percentage_error_multi_step_learn_single={period.mean_absolute_percentage_error_multi_step_learn_single}")
+            print(f"period.mean_absolute_percentage_error_multi_step_learn_join={period.mean_absolute_percentage_error_multi_step_learn_join}")
 
-        period.mean_absolute_percentage_error_learn_one_step_single = [0] * len(self.data_sources)
-        for i_ds in range(len(self.data_sources)):
-            period.mean_absolute_percentage_error_learn_one_step_single[i_ds] = mean_absolute_percentage_error_learn_one_step_sum_single[i_ds] / len(data_sources_y_predict_learn)
-        period.mean_absolute_percentage_error_learn_one_step_join = sum(period.mean_absolute_percentage_error_learn_one_step_single) / len(self.data_sources)
+        print(f"period.is_mean_absolute_percentage_error_multi_step_test={period.is_mean_absolute_percentage_error_multi_step_test}")
+        if period.is_mean_absolute_percentage_error_multi_step_test:
+            print(f"period.mean_absolute_percentage_error_multi_step_test_single={period.mean_absolute_percentage_error_multi_step_test_single}")
+            print(f"period.mean_absolute_percentage_error_multi_step_test_join={period.mean_absolute_percentage_error_multi_step_test_join}")
 
-        is_at_least_one_visualize = False
-        for i_ds_meta in range(len(self.data_sources_meta)):
-            if self.data_sources_meta[i_ds_meta].is_visualize:
-                is_at_least_one_visualize = True
-        if is_at_least_one_visualize:
-            self.visualize_one_step(period.learning_images_folder, data_sources_y_predict_learn, file_candle_indexes_learn, self.learn_predict_visualize_one_step_limit)
-        else:
-            print("Ни один источник данных не настроен на визуализацию.")
+        print(f"period.mean_absolute_percentage_error_one_step_learn_single={period.mean_absolute_percentage_error_one_step_learn_single}")
+        print(f"period.mean_absolute_percentage_error_one_step_learn_join={period.mean_absolute_percentage_error_one_step_learn_join}")
+
+        print(f"period.mean_absolute_percentage_error_one_step_test_single={period.mean_absolute_percentage_error_one_step_test_single}")
+        print(f"period.mean_absolute_percentage_error_one_step_test_join={period.mean_absolute_percentage_error_one_step_test_join}")
+
+        # is_at_least_one_visualize = False
+        # for i_ds_meta in range(len(self.data_sources_meta)):
+        #     if self.data_sources_meta[i_ds_meta].is_visualize:
+        #         is_at_least_one_visualize = True
+        # if is_at_least_one_visualize:
+        #     self.visualize_one_step(period.learning_images_folder, data_sources_y_predict_learn, file_candle_indexes_learn, self.learn_predict_visualize_one_step_limit)
+        # else:
+        #     print("Ни один источник данных не настроен на визуализацию.")
 
     def periods_process(self):
         error_messages = []
