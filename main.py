@@ -75,8 +75,8 @@ sequence_length = 100 # длина последовательных данных
 predict_length = 5 # количество шагов на которое будут спрогнозированы данные
 part_learn_predict = 0.0 # часть от учебных данных для которых будет выполнено прогнозирование на predict_length шагов вперед
 part_test_predict = 0.1 # часть от тестовых данных для которых будет выполнено прогнозирование на predict_length шагов вперед
-part_learn_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
-part_test_predict_visualize = (True, 15) # (False, 0.01) - вероятность визуализировать в файл спрогнозированные данные, (True, 20) - фиксированное количество, случайно выбранных, визуализаций
+part_learn_predict_visualize = (True, 15) # первое логическое значение - False: считать второе значение (число) вероятностью визуализировать спрогнозированные на несколько шагов значения, True: считать второе значение (число) максимальным количеством, случайно выбранных, визуализаций
+part_test_predict_visualize = (True, 15) # первое логическое значение - False: считать второе значение (число) вероятностью визуализировать спрогнозированные на несколько шагов значения, True: считать второе значение (число) максимальным количеством, случайно выбранных, визуализаций
 learn_predict_visualize_one_step_limit = 999 # максимальное количество визуализаций прогнозирования на один шаг вперед для учебного периода
 test_predict_visualize_one_step_limit = 999 # максимальное количество визуализаций прогнозирования на один шаг вперед для тестового периода
 is_visualize_prediction_union = True # визуализировать спрогнозированные последовательности, и сохранить в файлы. Все источники данных будут на одном изображении. Данная визуализация будет выполнена только если количество визуализируемых источников данных будет больше 1.
@@ -118,7 +118,7 @@ data_sources_meta = [
         normalizers=[
             normalizers.DynamicAbsoluteMinMaxScaler(data_indexes=[1, 2, 3, 4], is_input_denormalize=True, input_denormalize_weight=1, is_output_denormalize=True, output_denormalize_weight=1, over_rate_low=over_rate, over_rate_high=over_rate, add_values=[154], is_auto_over_rate_low=True, auto_over_rate_low_multipy=1.5, auto_over_rate_low_min=0.1, is_auto_over_rate_high=True, auto_over_rate_high_multipy=1.5, auto_over_rate_high_min=0.1),
             normalizers.SameValuesNoOutput(data_indexes=[5], is_input_denormalize=False, input_denormalize_weight=1, is_output_denormalize=False, output_denormalize_weight=1)
-        ], visualize=[("candle", [1,2,3,4])], is_visualize=True, visualize_ratio=[1], visualize_name=["price"])
+        ], visualize=[("candle", [1,2,3,4])], is_visualize=False, visualize_ratio=[1], visualize_name=["price"])
 ]
 
 loaded_models = []

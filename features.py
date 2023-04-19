@@ -470,6 +470,68 @@ class DataManager:
                 break
             i += 1
 
+    def visualize_multi_step(self, save_image_folder, data_sources_y_predict_multi_step, file_candle_indexes_multi_step, part_predict_visualize):
+        approved_sequence_length = 1 if self.predict_length >= self.visualize_prediction_cut else min(self.sequence_length, self.visualize_prediction_cut - self.predict_length)  # длина входной последовательности которую будем визуализировать
+        data_sources_true = []
+        data_sources_predict = []
+        visualize_data_sources_indexes = []
+        for i_ds in range(len(self.data_sources_meta)):
+            if self.data_sources_meta[i_ds].is_visualize:
+                data_sources_true.append([])
+                data_sources_predict.append([])
+                visualize_data_sources_indexes.append(i_ds)
+
+        if len(data_sources_y_predict_multi_step) > 0:
+            available_predict_indexes = list(range(len(data_sources_y_predict_multi_step[0]))) # список с доступными для выбора индексами, среди которых случайно будет выбрано для визуализации
+            visualize_count = 0
+            i = 0
+            while True:
+                # определяем индекс визуализируемого прогнозирования
+                is_let_in = True
+                i_predict = i
+                if part_predict_visualize[0]:
+                    rand_index = random.randrange(len(available_predict_indexes))
+                    i_predict = available_predict_indexes[rand_index]
+                    available_predict_indexes.pop(rand_index)
+                else:
+                    is_let_in = False
+                    rand = random.random()
+                    if rand <= part_predict_visualize[1]:
+                        is_let_in = True
+
+                if is_let_in:
+                    i_f, i_c = file_candle_indexes_multi_step[i_predict]
+                    if i_c + self.predict_length < len(self.data_sources[0][i_f]):
+                        i_ds = 0
+                        for i_visual_ds in visualize_data_sources_indexes:
+                            data_sources_true[i_ds].extend([self.data_sources[i_ds][i_f][i_candle] for i_candle in range(i_c - approved_sequence_length, i_c + self.predict_length)])
+                            data_sources_predict[i_ds].extend([self.data_sources[i_ds][i_f][i_candle][0:1] for i_candle in range(i_c - approved_sequence_length, i_c)])
+                            data_sources_predict[i_ds].extend(data_sources_y_predict_multi_step[i_visual_ds][i_predict])
+                            i_ds += 1
+
+                        visualize_start_timestamp = data_sources_true[0][0][0]
+                        visualize_end_timestamp = data_sources_true[0][-1][0]
+
+                        if self.is_visualize_prediction_union and len(visualize_data_sources_indexes) > 1:
+                            self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+
+                        if self.is_visualize_prediction_single:
+                            i_ds = 0
+                            for i_visual_ds in visualize_data_sources_indexes:
+                                self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_meta[i_visual_ds].short_name} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+                                i_ds += 1
+
+                        for i_ds2 in range(len(data_sources_true)):
+                            del data_sources_true[i_ds2][:]
+                            del data_sources_predict[i_ds2][:]
+                        visualize_count += 1
+                        if part_predict_visualize[0] and visualize_count >= part_predict_visualize[1]:
+                            break
+                if len(available_predict_indexes) == 0 or i >= len(data_sources_y_predict_multi_step[0]):
+                    break
+                i += 1
+
+
     def predict_multi_step(self, period, datetime_start_timestamp, datetime_end_timestamp, probability_predict, progress_label):
         # доходим до первой свечки начала периода
         i_f = 0
@@ -570,10 +632,6 @@ class DataManager:
                         i_c_curr = i_c + i_pred
                         for i_ds in range(len(self.data_sources)):
                             mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
-                            true_candle = self.data_sources[i_ds][i_f][i_c_curr]
-                            pred_candle = data_sources_y_predict_multi_step[i_ds][i][i_pred]
-                            if i_pred == 4:
-                                yy = 0
                             mean_absolute_percentage_error_multi_step_sum_single[i_ds] += mean_absolute_percentage_error
                     multi_step_count += 1
 
@@ -699,14 +757,18 @@ class DataManager:
         print(f"period.mean_absolute_percentage_error_one_step_test_single={period.mean_absolute_percentage_error_one_step_test_single}")
         print(f"period.mean_absolute_percentage_error_one_step_test_join={period.mean_absolute_percentage_error_one_step_test_join}")
 
-        # is_at_least_one_visualize = False
-        # for i_ds_meta in range(len(self.data_sources_meta)):
-        #     if self.data_sources_meta[i_ds_meta].is_visualize:
-        #         is_at_least_one_visualize = True
-        # if is_at_least_one_visualize:
-        #     self.visualize_one_step(period.learning_images_folder, data_sources_y_predict_learn, file_candle_indexes_learn, self.learn_predict_visualize_one_step_limit)
-        # else:
-        #     print("Ни один источник данных не настроен на визуализацию.")
+        # визуализируем прогнозирования
+        is_at_least_one_visualize = False
+        for i_ds_meta in range(len(self.data_sources_meta)):
+            if self.data_sources_meta[i_ds_meta].is_visualize:
+                is_at_least_one_visualize = True
+        if is_at_least_one_visualize:
+            self.visualize_one_step(period.learning_images_folder, data_sources_y_predict_one_step_learn, file_candle_indexes_one_step_learn, self.learn_predict_visualize_one_step_limit)
+            self.visualize_one_step(period.testing_images_folder, data_sources_y_predict_one_step_test, file_candle_indexes_one_step_test, self.test_predict_visualize_one_step_limit)
+            self.visualize_multi_step(period.learning_images_predict_folder, data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn, self.part_learn_predict_visualize)
+            self.visualize_multi_step(period.testing_images_predict_folder, data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test, self.part_test_predict_visualize)
+        else:
+            print("Ни один источник данных не настроен на визуализацию.")
 
     def periods_process(self):
         error_messages = []
