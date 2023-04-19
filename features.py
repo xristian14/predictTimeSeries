@@ -2,6 +2,7 @@ import sys
 import time
 import random
 import os
+import warnings
 import numpy as np
 import datetime
 import calendar
@@ -16,6 +17,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
 
+warnings.filterwarnings("ignore", module = "mplfinance\..*" )
 # функция возвращает дату в формате UTC+00:00
 def timestamp_to_utc_datetime(date):
     return datetime.datetime.utcfromtimestamp(date / 1000).replace(tzinfo=datetime.timezone.utc)
@@ -415,8 +417,7 @@ class DataManager:
         for i in range(len(data_sources_y_predict)):
             i_f, i_c = file_candle_indexes[i]
             for i_ds in range(len(self.data_sources)):
-                mean_absolute_percentage_error = sum([abs(
-                    self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict[i][i_ds][data_index]) / (self.data_sources[i_ds][i_f][i_c][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
+                mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c][data_index] - data_sources_y_predict[i][i_ds][data_index]) / (self.data_sources[i_ds][i_f][i_c][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes) * 100
                 mean_absolute_percentage_error_one_step_sum_single[i_ds] += mean_absolute_percentage_error
 
         mean_absolute_percentage_error_one_step_single = [0] * len(self.data_sources)
@@ -508,11 +509,11 @@ class DataManager:
                         data_sources_add_labels = []
                         i_ds = 0
                         for i_visual_ds in visualize_data_sources_indexes:
-                            data_sources_true[i_ds].extend([self.data_sources[i_ds][i_f][i_candle] for i_candle in range(i_c - approved_sequence_length, i_c + self.predict_length)])
-                            data_sources_predict[i_ds].extend([self.data_sources[i_ds][i_f][i_candle][0:1] for i_candle in range(i_c - approved_sequence_length, i_c)])
+                            data_sources_true[i_ds].extend([self.data_sources[i_visual_ds][i_f][i_candle] for i_candle in range(i_c - approved_sequence_length, i_c + self.predict_length)])
+                            data_sources_predict[i_ds].extend([self.data_sources[i_visual_ds][i_f][i_candle][0:1] for i_candle in range(i_c - approved_sequence_length, i_c)])
                             data_sources_predict[i_ds].extend(data_sources_y_predict_multi_step[i_visual_ds][i_predict])
 
-                            data_sources_add_labels.append(f" loss={float_to_str_format(mean_absolute_percentage_error_y_predict_multi_step_single[i_predict][i_visual_ds], 3)}")
+                            data_sources_add_labels.append(f"  loss= {float_to_str_format(mean_absolute_percentage_error_y_predict_multi_step_single[i_predict][i_visual_ds], 2)}%")
                             i_ds += 1
 
                         visualize_start_timestamp = data_sources_true[0][0][0]
@@ -639,7 +640,7 @@ class DataManager:
                     for i_pred in range(self.predict_length):
                         i_c_curr = i_c + i_pred
                         for i_ds in range(len(self.data_sources)):
-                            mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
+                            mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes) * 100
                             mean_absolute_percentage_error_multi_step_sum_single[i_ds] += mean_absolute_percentage_error
                             mean_absolute_percentage_error_y_predict_multi_step_single[-1][i_ds] += mean_absolute_percentage_error
                     for i_ds in range(len(self.data_sources)):
@@ -1089,7 +1090,7 @@ class DataManager:
 
                     y_label = self.data_sources_meta[i_visual_ds].visualize_name[i_panel]
                     if i_panel == 0:
-                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\"{data_sources_add_labels[i_ds]}"
+                        y_label = f"{y_label} <{self.data_sources_meta[i_visual_ds].short_name}>{data_sources_add_labels[i_ds]}"
                     panel_num = sum([len(self.data_sources_meta[visualize_data_sources_indexes[i_i_ds]].visualize) for i_i_ds in range(i_ds, -1, -1)]) - (len(self.data_sources_meta[visualize_data_sources_indexes[i_ds]].visualize) - i_panel)
 
                     dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
@@ -1136,7 +1137,7 @@ class DataManager:
 
                     y_label = self.data_sources_meta[i_visual_ds].visualize_name[i_panel]
                     if i_panel == 0:
-                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\"{data_sources_add_labels[i_ds]}"
+                        y_label = f"{y_label} <{self.data_sources_meta[i_visual_ds].short_name}>{data_sources_add_labels[i_ds]}"
                     panel_num = sum([len(self.data_sources_meta[visualize_data_sources_indexes[i_i_ds]].visualize) for i_i_ds in range(i_ds, -1, -1)]) - (len(self.data_sources_meta[visualize_data_sources_indexes[i_ds]].visualize) - i_panel)
 
                     dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
@@ -1148,7 +1149,7 @@ class DataManager:
                         add_plot.append(mpf.make_addplot(p_data_true, type='line', panel=panel_num, fill_between=[dict_end_inp_seq], ylabel=y_label, ylim=(ymin, ymax), linewidths=1, alpha=1, color="black"))
                         add_plot.append(mpf.make_addplot(p_data_predict, type='line', panel=panel_num, ylim=(ymin, ymax), linewidths=1, alpha=1, color="springgreen"))
 
-        myrcparams = {'axes.labelsize': 'x-small'}
+        myrcparams = {'axes.labelsize': 'small'}
         my_style = mpf.make_mpf_style(base_mpf_style='yahoo', facecolor='white', y_on_right=False, rc=myrcparams)
         panel_ratios = ()
         for i_ds in range(len(data_sources_true)):
