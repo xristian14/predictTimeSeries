@@ -442,6 +442,8 @@ class DataManager:
                 visualize_start_timestamp = data_sources_y_predict[i][0][0]
             visualize_end_timestamp = data_sources_y_predict[i][0][0]
 
+            data_sources_add_labels = [""] * len(visualize_data_sources_indexes)
+
             i_ds = 0
             for i_visual_ds in visualize_data_sources_indexes:
                 i_f, i_c = file_candle_indexes[i]
@@ -451,12 +453,12 @@ class DataManager:
 
             if len(data_sources_true[0]) >= self.visualize_prediction_cut or i == len(data_sources_y_predict) - 1:
                 if self.is_visualize_prediction_union and len(visualize_data_sources_indexes) > 1:
-                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+                    self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, data_sources_add_labels, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
 
                 if self.is_visualize_prediction_single:
                     i_ds = 0
                     for i_visual_ds in visualize_data_sources_indexes:
-                        self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_meta[i_visual_ds].short_name} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+                        self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], [data_sources_add_labels[i_ds]], f"{save_image_folder}/single {self.data_sources_meta[i_visual_ds].short_name} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
                         i_ds += 1
 
                 for i_ds2 in range(len(data_sources_true)):
@@ -470,7 +472,8 @@ class DataManager:
                 break
             i += 1
 
-    def visualize_multi_step(self, save_image_folder, data_sources_y_predict_multi_step, file_candle_indexes_multi_step, part_predict_visualize):
+    # mean_absolute_percentage_error_y_predict_multi_step_single - значения ошибок для каждого прогнозирования
+    def visualize_multi_step(self, save_image_folder, data_sources_y_predict_multi_step, file_candle_indexes_multi_step, mean_absolute_percentage_error_y_predict_multi_step_single, part_predict_visualize):
         approved_sequence_length = 1 if self.predict_length >= self.visualize_prediction_cut else min(self.sequence_length, self.visualize_prediction_cut - self.predict_length)  # длина входной последовательности которую будем визуализировать
         data_sources_true = []
         data_sources_predict = []
@@ -502,23 +505,26 @@ class DataManager:
                 if is_let_in:
                     i_f, i_c = file_candle_indexes_multi_step[i_predict]
                     if i_c + self.predict_length < len(self.data_sources[0][i_f]):
+                        data_sources_add_labels = []
                         i_ds = 0
                         for i_visual_ds in visualize_data_sources_indexes:
                             data_sources_true[i_ds].extend([self.data_sources[i_ds][i_f][i_candle] for i_candle in range(i_c - approved_sequence_length, i_c + self.predict_length)])
                             data_sources_predict[i_ds].extend([self.data_sources[i_ds][i_f][i_candle][0:1] for i_candle in range(i_c - approved_sequence_length, i_c)])
                             data_sources_predict[i_ds].extend(data_sources_y_predict_multi_step[i_visual_ds][i_predict])
+
+                            data_sources_add_labels.append(f" loss={float_to_str_format(mean_absolute_percentage_error_y_predict_multi_step_single[i_predict][i_visual_ds], 3)}")
                             i_ds += 1
 
                         visualize_start_timestamp = data_sources_true[0][0][0]
                         visualize_end_timestamp = data_sources_true[0][-1][0]
 
                         if self.is_visualize_prediction_union and len(visualize_data_sources_indexes) > 1:
-                            self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+                            self.visualize_predict_to_file(data_sources_true, data_sources_predict, visualize_data_sources_indexes, data_sources_add_labels, f"{save_image_folder}/union {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
 
                         if self.is_visualize_prediction_single:
                             i_ds = 0
                             for i_visual_ds in visualize_data_sources_indexes:
-                                self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], f"{save_image_folder}/single {self.data_sources_meta[i_visual_ds].short_name} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
+                                self.visualize_predict_to_file([data_sources_true[i_ds]], [data_sources_predict[i_ds]], [i_visual_ds], [data_sources_add_labels[i_ds]], f"{save_image_folder}/single {self.data_sources_meta[i_visual_ds].short_name} {timestamp_to_utc_datetime(visualize_start_timestamp).strftime('%Y-%m-%d %Hh %Mm')} - {timestamp_to_utc_datetime(visualize_end_timestamp).strftime('%Y-%m-%d %Hh %Mm')}.png")
                                 i_ds += 1
 
                         for i_ds2 in range(len(data_sources_true)):
@@ -622,10 +628,12 @@ class DataManager:
         return data_sources_y_predict, file_candle_indexes
 
     def loss_multi_step(self, data_sources_y_predict_multi_step, file_candle_indexes_multi_step):
+        mean_absolute_percentage_error_y_predict_multi_step_single = [] # значения ошибок для каждого прогнозирования
         mean_absolute_percentage_error_multi_step_sum_single = [0] * len(self.data_sources)
         multi_step_count = 0  # количество подсчитанных спрогнозированных последовательностей. Если истинных данных нет (например прогноз для последних данных) то расчет ошибки для этого прогноза делаться не будет.
         if len(data_sources_y_predict_multi_step) > 0:
             for i in range(len(data_sources_y_predict_multi_step[0])):
+                mean_absolute_percentage_error_y_predict_multi_step_single.append([0.0] * len(self.data_sources))
                 i_f, i_c = file_candle_indexes_multi_step[i]
                 if i_c + self.predict_length < len(self.data_sources[0][i_f]):
                     for i_pred in range(self.predict_length):
@@ -633,19 +641,22 @@ class DataManager:
                         for i_ds in range(len(self.data_sources)):
                             mean_absolute_percentage_error = sum([abs(self.data_sources[i_ds][i_f][i_c_curr][data_index] - data_sources_y_predict_multi_step[i_ds][i][i_pred][data_index]) / (self.data_sources[i_ds][i_f][i_c_curr][data_index] + self.mean_absolute_percentage_error_epsilon) for data_index in self.data_sources_meta[i_ds].losses_data_indexes]) / len(self.data_sources_meta[i_ds].losses_data_indexes)
                             mean_absolute_percentage_error_multi_step_sum_single[i_ds] += mean_absolute_percentage_error
+                            mean_absolute_percentage_error_y_predict_multi_step_single[-1][i_ds] += mean_absolute_percentage_error
+                    for i_ds in range(len(self.data_sources)):
+                        mean_absolute_percentage_error_y_predict_multi_step_single[-1][i_ds] /= self.predict_length
                     multi_step_count += 1
 
         mean_absolute_percentage_error_multi_step_single = None
         mean_absolute_percentage_error_multi_step_join = None
         if multi_step_count > 0:
             is_mean_absolute_percentage_error_multi_step = True
-            mean_absolute_percentage_error_multi_step_single = [0] * len(self.data_sources)
+            mean_absolute_percentage_error_multi_step_single = [0.0] * len(self.data_sources)
             for i_ds in range(len(self.data_sources)):
                 mean_absolute_percentage_error_multi_step_single[i_ds] = mean_absolute_percentage_error_multi_step_sum_single[i_ds] / multi_step_count / self.predict_length
             mean_absolute_percentage_error_multi_step_join = sum(mean_absolute_percentage_error_multi_step_sum_single) / len(self.data_sources)
         else:
             is_mean_absolute_percentage_error_multi_step = False
-        return is_mean_absolute_percentage_error_multi_step, mean_absolute_percentage_error_multi_step_single, mean_absolute_percentage_error_multi_step_join
+        return is_mean_absolute_percentage_error_multi_step, mean_absolute_percentage_error_multi_step_single, mean_absolute_percentage_error_multi_step_join, mean_absolute_percentage_error_y_predict_multi_step_single
 
     def handle_period(self, period):
         self.create_period_folders(period)
@@ -714,14 +725,14 @@ class DataManager:
 
         # прогнозирование на несколько шагов для учебных и тестовых данных и вычисление ошибки
         data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "1/4 Прогнозирование на несколько шагов вперед для учебных данных:")
-        is_mean_absolute_percentage_error_multi_step_learn, mean_absolute_percentage_error_multi_step_learn_single, mean_absolute_percentage_error_multi_step_learn_join = self.loss_multi_step(data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn)
+        is_mean_absolute_percentage_error_multi_step_learn, mean_absolute_percentage_error_multi_step_learn_single, mean_absolute_percentage_error_multi_step_learn_join, mean_absolute_percentage_error_y_predict_multi_step_learn_single = self.loss_multi_step(data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn)
         period.is_mean_absolute_percentage_error_multi_step_learn = is_mean_absolute_percentage_error_multi_step_learn
         if is_mean_absolute_percentage_error_multi_step_learn:
             period.mean_absolute_percentage_error_multi_step_learn_single = mean_absolute_percentage_error_multi_step_learn_single
             period.mean_absolute_percentage_error_multi_step_learn_join = mean_absolute_percentage_error_multi_step_learn_join
 
         data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test = self.predict_multi_step(period, testing_start_timestamp, testing_end_timestamp, self.part_test_predict, "2/4 Прогнозирование на несколько шагов вперед для тестовых данных:")
-        is_mean_absolute_percentage_error_multi_step_test, mean_absolute_percentage_error_multi_step_test_single, mean_absolute_percentage_error_multi_step_test_join = self.loss_multi_step(data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test)
+        is_mean_absolute_percentage_error_multi_step_test, mean_absolute_percentage_error_multi_step_test_single, mean_absolute_percentage_error_multi_step_test_join, mean_absolute_percentage_error_y_predict_multi_step_test_single = self.loss_multi_step(data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test)
         period.is_mean_absolute_percentage_error_multi_step_test = is_mean_absolute_percentage_error_multi_step_test
         if is_mean_absolute_percentage_error_multi_step_test:
             period.mean_absolute_percentage_error_multi_step_test_single = mean_absolute_percentage_error_multi_step_test_single
@@ -765,8 +776,8 @@ class DataManager:
         if is_at_least_one_visualize:
             self.visualize_one_step(period.learning_images_folder, data_sources_y_predict_one_step_learn, file_candle_indexes_one_step_learn, self.learn_predict_visualize_one_step_limit)
             self.visualize_one_step(period.testing_images_folder, data_sources_y_predict_one_step_test, file_candle_indexes_one_step_test, self.test_predict_visualize_one_step_limit)
-            self.visualize_multi_step(period.learning_images_predict_folder, data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn, self.part_learn_predict_visualize)
-            self.visualize_multi_step(period.testing_images_predict_folder, data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test, self.part_test_predict_visualize)
+            self.visualize_multi_step(period.learning_images_predict_folder, data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn, mean_absolute_percentage_error_y_predict_multi_step_learn_single, self.part_learn_predict_visualize)
+            self.visualize_multi_step(period.testing_images_predict_folder, data_sources_y_predict_multi_step_test, file_candle_indexes_multi_step_test, mean_absolute_percentage_error_y_predict_multi_step_test_single, self.part_test_predict_visualize)
         else:
             print("Ни один источник данных не настроен на визуализацию.")
 
@@ -1021,7 +1032,7 @@ class DataManager:
         return reformatted_data
 
     # data_sources_true[0] и data_sources_predict[0] должны иметь одинаковую длину
-    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, visualize_data_sources_indexes, save_image_path):
+    def visualize_predict_to_file(self, data_sources_true, data_sources_predict, visualize_data_sources_indexes, data_sources_add_labels, save_image_path):
         add_plot = []
         where_values_end_inp_seq = [False] * len(data_sources_predict[0])
         y_over_rate = 0.02 # отступ от верхнего и нижнего края
@@ -1078,7 +1089,7 @@ class DataManager:
 
                     y_label = self.data_sources_meta[i_visual_ds].visualize_name[i_panel]
                     if i_panel == 0:
-                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\""
+                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\"{data_sources_add_labels[i_ds]}"
                     panel_num = sum([len(self.data_sources_meta[visualize_data_sources_indexes[i_i_ds]].visualize) for i_i_ds in range(i_ds, -1, -1)]) - (len(self.data_sources_meta[visualize_data_sources_indexes[i_ds]].visualize) - i_panel)
 
                     dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
@@ -1125,7 +1136,7 @@ class DataManager:
 
                     y_label = self.data_sources_meta[i_visual_ds].visualize_name[i_panel]
                     if i_panel == 0:
-                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\""
+                        y_label = f"{y_label} \"{self.data_sources_meta[i_visual_ds].short_name}\"{data_sources_add_labels[i_ds]}"
                     panel_num = sum([len(self.data_sources_meta[visualize_data_sources_indexes[i_i_ds]].visualize) for i_i_ds in range(i_ds, -1, -1)]) - (len(self.data_sources_meta[visualize_data_sources_indexes[i_ds]].visualize) - i_panel)
 
                     dict_end_inp_seq = dict(y1=ymin, y2=ymax, where=where_values_end_inp_seq, alpha=0.55, color='red')
