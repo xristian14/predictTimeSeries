@@ -861,6 +861,40 @@ class DataManager:
             print(f"Обрабатывается период {i + 1}/{len(self.periods)}")
             self.handle_period(self.periods[i])
 
+        with open(f"{self.base_folder}/info.txt", "w", encoding='utf-8') as new_file:
+            new_file.write("Periods:\n")
+            new_file.write("------------------------------------------------------------\n")
+            for i in range(len(self.periods)):
+                new_file.write(f"#{i} {self.periods[i].learning_start.date_time.strftime('%Y-%m-%d %Hh %Mm')} - {self.periods[i].testing_end.date_time.strftime('%Y-%m-%d %Hh %Mm')}\n")
+
+                if self.periods[i].is_mean_absolute_percentage_error_multi_step_learn and self.periods[i].is_mean_absolute_percentage_error_multi_step_test:
+                    new_file.write(f"loss multi step Learn Single: {', '.join([float_to_str_format(self.periods[i].mean_absolute_percentage_error_multi_step_learn_single[k], 2)  for k in range(len(self.periods[i].mean_absolute_percentage_error_multi_step_learn_single))])}\n")
+                    new_file.write(f"loss multi step Test  Single: {', '.join([float_to_str_format(self.periods[i].mean_absolute_percentage_error_multi_step_test_single[k], 2)  for k in range(len(self.periods[i].mean_absolute_percentage_error_multi_step_test_single))])}\n")
+                    new_file.write(f"loss multi step Learn Join:   {self.periods[i].mean_absolute_percentage_error_multi_step_learn_join}\n")
+                    new_file.write(f"loss multi step Test  Join:   {self.periods[i].mean_absolute_percentage_error_multi_step_test_join}\n")
+                else:
+                    new_file.write(f"is there multi step learn and test loss: {self.periods[i].is_mean_absolute_percentage_error_multi_step_learn and self.periods[i].is_mean_absolute_percentage_error_multi_step_test}\n")
+
+                new_file.write(f"loss one step Learn Single: {', '.join([float_to_str_format(self.periods[i].mean_absolute_percentage_error_one_step_learn_single[k], 2) for k in range(len(self.periods[i].mean_absolute_percentage_error_one_step_learn_single))])}\n")
+                new_file.write(f"loss one step Test  Single: {', '.join([float_to_str_format(self.periods[i].mean_absolute_percentage_error_one_step_test_single[k], 2) for k in range(len(self.periods[i].mean_absolute_percentage_error_one_step_test_single))])}\n")
+                new_file.write(f"loss one step Learn Join:   {self.periods[i].mean_absolute_percentage_error_one_step_learn_join}\n")
+                new_file.write(f"loss one step Test  Join:   {self.periods[i].mean_absolute_percentage_error_one_step_test_join}\n")
+                new_file.write("------------------------------------------------------------\n")
+            new_file.write(f"sequence length: {self.sequence_length}\n")
+            new_file.write(f"predict length: {self.predict_length}\n")
+            new_file.write(f"is save predict data: {self.is_save_predict_data}\n")
+            new_file.write(f"Data sources:\n")
+            new_file.write("------------------------------------------------------------\n")
+            for i_ds in range(len(self.data_sources_meta)):
+                new_file.write(f"#{i_ds} {self.data_sources_meta[i_ds].short_name}\n")
+                new_file.write(f"files:\n")
+                for i_f in range(len(self.data_sources_file_names[i_ds])):
+                    new_file.write(f"    {self.data_sources_file_names[i_ds][i_f]}\n")
+                new_file.write(f"normalizers:\n")
+                for i_n in range(len(self.data_sources_meta[i_ds].normalizers)):
+                    new_file.write(f"    {self.data_sources_meta[i_ds].normalizers[i_n].__class__.__name__}\n")
+                new_file.write("------------------------------------------------------------\n")
+
     # нормализует последовательность свечек для всех источников данных, и выходные свечки для всех источников данных, если указаны. Возвращает последовательность входных векторов нейронной сети, и выходной вектор нейронной сети, если указан, и настройки нормализации вида settings[i_ds][i_normalize]. output_i_f, output_i_c - индексы
     def normalize_data_sources(self, output_i_f, output_i_c, data_sources_inp_seq, data_sources_add_candles = [], data_sources_output=None):
         data_sources_normalizers_inp_seq = []
