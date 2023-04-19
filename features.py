@@ -371,9 +371,21 @@ class DataManager:
             current_datetime_timestamp = self.data_sources[0][i_f][i_c][0]
         return (x_period, y_period, data_sources_normalizers_settings_period, file_candle_indexes_period)
 
+    def save_predict_data(self, data_source_y_predict_multi_step, new_file_path):
+        with open(f"{new_file_path}", "w", encoding='utf-8') as new_file:
+            for i in range(len(data_source_y_predict_multi_step)):
+                new_line = ""
+                for i_predict in range(len(data_source_y_predict_multi_step[i])):
+                    new_line += f"{str(data_source_y_predict_multi_step[i][i_predict][0])},"
+                    new_line += ",".join([float_to_str_format(data_source_y_predict_multi_step[i][i_predict][i_dat], 8) for i_dat in range(1, len(data_source_y_predict_multi_step[i][i_predict]))]) + "|"
+                new_line = f"{new_line[:-1]}\n"
+                new_file.write(new_line)
+
     def create_period_folders(self, period):
         period.base_folder = f"{self.base_folder}/{period.learning_start.date_time.strftime('%Y-%m-%d %Hh %Mm')} - {period.testing_end.date_time.strftime('%Y-%m-%d %Hh %Mm')}"
         os.makedirs(period.base_folder)
+        period.save_model_folder = f"{period.base_folder}/save_model"
+        os.makedirs(period.save_model_folder)
         period.learning_folder = f"{period.base_folder}/learning"
         os.makedirs(period.learning_folder)
         period.learning_data_folder = f"{period.learning_folder}/data"
@@ -575,6 +587,7 @@ class DataManager:
                 elapsed_create_inp_seq = 0
                 elapsed_normalize = 0
                 elapsed_predict = 0
+                elapsed_denormalize = 0
 
                 for i_p in range(self.predict_length):
                     # формируем входную последовательность для всех источников данных
@@ -605,11 +618,18 @@ class DataManager:
                         output_datetime_timestamp = data_sources_y_predict_current[i_ds][-1][0] + self.interval_milliseconds
                     else:
                         output_datetime_timestamp = self.data_sources[i_ds][i_f][i_c][0] + self.interval_milliseconds
+                    time_denormalize_start = time.process_time()
                     data_sources_input_sequence_denorm, data_sources_output_denorm = self.denormalize_insert_input_vectors_sequence_output_vector(data_sources_normalizers_settings, input_vectors_sequence=None, output_vector=output_vector, output_datetime_timestamp=output_datetime_timestamp)
+                    elapsed_denormalize += time.process_time() - time_denormalize_start
 
                     for i_ds_pr in range(len(self.data_sources)):
                         data_sources_y_predict_current[i_ds_pr].append(data_sources_output_denorm[i_ds_pr])
 
+                # print(f"i_f={i_f} i_c={i_c}")
+                # print(f"elapsed_create_inp_seq={elapsed_create_inp_seq}")
+                # print(f"elapsed_normalize=     {elapsed_normalize}")
+                # print(f"elapsed_predict=       {elapsed_predict}")
+                # print(f"elapsed_denormalize=   {elapsed_denormalize}")
 
                 for i_ds in range(len(self.data_sources)):
                     data_sources_y_predict[i_ds].append(data_sources_y_predict_current[i_ds])
@@ -722,7 +742,7 @@ class DataManager:
                 print(message)
             raise ValueError(error_messages[0])
 
-        self.mean_absolute_percentage_error_epsilon = 0.3
+        period.model.save(period.save_model_folder) # сохраняем модель
 
         # прогнозирование на несколько шагов для учебных и тестовых данных и вычисление ошибки
         data_sources_y_predict_multi_step_learn, file_candle_indexes_multi_step_learn = self.predict_multi_step(period, learning_start_timestamp, learning_end_timestamp, self.part_learn_predict, "1/4 Прогнозирование на несколько шагов вперед для учебных данных:")
@@ -739,7 +759,12 @@ class DataManager:
             period.mean_absolute_percentage_error_multi_step_test_single = mean_absolute_percentage_error_multi_step_test_single
             period.mean_absolute_percentage_error_multi_step_test_join = mean_absolute_percentage_error_multi_step_test_join
 
-        if not self.is_save_predict_data:
+        if self.is_save_predict_data:
+            for i_ds in range(len(self.data_sources)):
+                self.save_predict_data(data_sources_y_predict_multi_step_learn[i_ds], f"{period.learning_data_folder}/{self.data_sources_file_names[i_ds][0]}")
+            for i_ds in range(len(self.data_sources)):
+                self.save_predict_data(data_sources_y_predict_multi_step_test[i_ds], f"{period.testing_data_folder}/{self.data_sources_file_names[i_ds][0]}")
+        else:
             print("Сохранение спрогнозированных данных отключено.")
 
         # прогнозирование на один шаг для учебных и тестовых данных и вычисление ошибки
@@ -829,6 +854,8 @@ class DataManager:
         self.periods_end_timestamp = utc_datetime_to_timestamp(self.periods[-1].testing_end.date_time)
 
         self.create_data_sources_periods_x_y()
+
+        self.mean_absolute_percentage_error_epsilon = 0.3 # устанавливаю значение, прибавляемое к истинным данным при рассчете ошибки, чтобы не было деления на ноль когда истинные данные ноль
 
         for i in range(len(self.periods)):
             print(f"Обрабатывается период {i + 1}/{len(self.periods)}")
